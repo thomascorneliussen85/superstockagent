@@ -6,6 +6,10 @@ on:
     - cron: "0 5 * * 2-6"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   scan:
     runs-on: ubuntu-latest
@@ -25,3 +29,5 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_NOTIFY_USER: ${{ github.repository_owner }}

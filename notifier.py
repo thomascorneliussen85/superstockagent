@@ -26,6 +26,17 @@ def send_email(subject: str, text: str):
         smtp.send_message(msg)
 
 
+def send_github_issue(subject: str, text: str):
+    mention = f"@{config.GITHUB_NOTIFY_USER}\n\n" if config.GITHUB_NOTIFY_USER else ""
+    resp = requests.post(
+        f"https://api.github.com/repos/{config.GITHUB_REPOSITORY}/issues",
+        headers={"Authorization": f"Bearer {config.GITHUB_TOKEN}", "Accept": "application/vnd.github+json"},
+        json={"title": subject, "body": f"{mention}```text\n{text}\n```"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+
+
 def send_notifications(subject: str, text: str) -> list[str]:
     """Send the report on every configured channel. Returns the channels that failed."""
     channels = []
@@ -33,6 +44,9 @@ def send_notifications(subject: str, text: str) -> list[str]:
         channels.append(("Telegram", lambda: send_telegram(f"{subject}\n\n{text}")))
     if config.SMTP_USER and config.SMTP_PASSWORD and config.EMAIL_TO:
         channels.append(("Email", lambda: send_email(subject, text)))
+
+    if config.GITHUB_TOKEN and config.GITHUB_REPOSITORY:
+        channels.append(("GitHub issue", lambda: send_github_issue(subject, text)))
 
     if not channels:
         print("No notification channel configured; report printed only.")

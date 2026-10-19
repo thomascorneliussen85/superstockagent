@@ -20,7 +20,7 @@ Without an API key, the scan still runs and the catalyst step is skipped. Tune t
 
 ## Daily morning alert (GitHub Actions)
 
-`.github/workflows/morning-scan.yml` runs the scan Tuesday–Saturday at 05:00 UTC (07:00 Oslo in summer, 06:00 in winter), after each US trading day, and sends the report by Telegram and/or email.
+`.github/workflows/morning-scan.yml` runs the scan Tuesday–Saturday at 05:00 UTC (07:00 Oslo in summer, 06:00 in winter), after each US trading day, and posts the report as a GitHub issue in this repo (mentioning the repo owner, so GitHub notifies you by email and in the GitHub app). No setup needed for that. Telegram and email are optional extras.
 
 Add these under **Settings → Secrets and variables → Actions → New repository secret**:
 

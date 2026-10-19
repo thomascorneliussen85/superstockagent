@@ -13,6 +13,10 @@ SMTP_PORT = int(os.getenv("SMTP_PORT") or 465)
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_TO = os.getenv("EMAIL_TO", "")
+# Set automatically in GitHub Actions: the report is posted as an issue in this repo
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")
+GITHUB_NOTIFY_USER = os.getenv("GITHUB_NOTIFY_USER", "")
 
 # --- CONNOR BATES SUPER STOCK PARAMETERS ---
 MIN_DAILY_DOLLAR_VOLUME = 80_000_000   # Min $80M USD Daily Dollar Volume
