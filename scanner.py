@@ -8,6 +8,7 @@ class StockScanner:
         self.min_atr_pct = min_atr_pct
         self.base_days = base_days
         self.max_base_range = max_base_range
+        self.failed_tickers = []
 
     def scan_ticker(self, ticker: str) -> dict | None:
         """Fetch market data and evaluate Super Stock quantitative metrics."""
@@ -15,6 +16,9 @@ class StockScanner:
             stock = yf.Ticker(ticker)
             df = stock.history(period="1y")
 
+            if df.empty:
+                self.failed_tickers.append(ticker)
+                return None
             if len(df) < 120:
                 return None
 
@@ -74,4 +78,5 @@ class StockScanner:
 
         except Exception as e:
             print(f"Error scanning {ticker}: {e}")
+            self.failed_tickers.append(ticker)
             return None

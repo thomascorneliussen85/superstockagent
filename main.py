@@ -1,9 +1,37 @@
+import sys
+from datetime import date
+
 import config
 from scanner import StockScanner
 from setup_detector import SetupDetector
 from catalyst_agent import CatalystAgent
+from notifier import send_notifications
 
-def run_super_stock_agent():
+def build_report(focus_list: list[dict], failed_tickers: list[str]) -> list[str]:
+    lines = []
+    if not focus_list:
+        lines.append("No stocks passed all filters today. Exercise patience!")
+
+    for item in focus_list:
+        lines.append(f"🔥 {item['ticker']} | Price: ${item['close']} | ATR: {item['atr_pct']}% | Daily Vol: ${item['dollar_vol_M']}M")
+        base_label = "tight" if item['is_tight_base'] else "loose"
+        lines.append(f"📐 Base Range: {item['base_range_pct']}% ({base_label}, max {config.MAX_BASE_RANGE_PCT}%)")
+        lines.append(f"📌 Technical Setups: {', '.join(item['setups'])}")
+        ai = item['ai']
+        if "score_1_to_10" in ai:
+            lines.append(f"💡 Theme/Sector: {ai.get('theme_or_sector')}")
+            lines.append(f"⚡ Catalyst (Score {ai.get('score_1_to_10')}/10): {ai.get('catalyst_type')} - {ai.get('catalyst_summary')}")
+        elif "error" in ai:
+            lines.append(f"⚠️ AI Error: {ai['error']}")
+        else:
+            lines.append(f"💡 AI Note: {ai.get('catalyst_summary', 'Manual review needed')}")
+        lines.append("-" * 40)
+
+    if failed_tickers:
+        lines.append(f"⚠️ No market data for: {', '.join(failed_tickers)}")
+    return lines
+
+def run_super_stock_agent() -> int:
     print("=" * 60)
     print("🚀 RUNNING SUPER STOCK DISCOVERY AGENT (Connor Bates Model)")
     print("=" * 60)
@@ -51,24 +79,16 @@ def run_super_stock_agent():
     print("📋 FINAL SUPER STOCK FOCUS LIST")
     print("=" * 60 + "\n")
 
-    if not focus_list:
-        print("No stocks passed all filters today. Exercise patience!")
-        return
+    if len(scanner.failed_tickers) == len(config.DEFAULT_TICKERS):
+        print("❌ Could not fetch market data for any ticker. No report sent.")
+        return 1
 
-    for item in focus_list:
-        print(f"🔥 **{item['ticker']}** | Price: ${item['close']} | ATR: {item['atr_pct']}% | Daily Vol: ${item['dollar_vol_M']}M")
-        base_label = "tight" if item['is_tight_base'] else "loose"
-        print(f"📐 **Base Range:** {item['base_range_pct']}% ({base_label}, max {config.MAX_BASE_RANGE_PCT}%)")
-        print(f"📌 **Technical Setups:** {', '.join(item['setups'])}")
-        ai = item['ai']
-        if "score_1_to_10" in ai:
-            print(f"💡 **Theme/Sector:** {ai.get('theme_or_sector')}")
-            print(f"⚡ **Catalyst (Score {ai.get('score_1_to_10')}/10):** {ai.get('catalyst_type')} - {ai.get('catalyst_summary')}")
-        elif "error" in ai:
-            print(f"⚠️ **AI Error:** {ai['error']}")
-        else:
-            print(f"💡 **AI Note:** {ai.get('catalyst_summary', 'Manual review needed')}")
-        print("-" * 60)
+    report = "\n".join(build_report(focus_list, scanner.failed_tickers))
+    print(report)
+
+    subject = f"📋 Super Stock Focus List {date.today():%d.%m.%Y} ({len(focus_list)} stocks)"
+    failed_channels = send_notifications(subject, report)
+    return 1 if failed_channels else 0
 
 if __name__ == "__main__":
-    run_super_stock_agent()
+    sys.exit(run_super_stock_agent())
