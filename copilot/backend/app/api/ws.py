@@ -84,6 +84,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 m = {"type": "heartbeat", "data": hub.status_payload()}
             await ws.send_json(m)
 
+    background: set[asyncio.Task] = set()
+
     async def reader() -> None:
         while True:
             raw = await ws.receive_text()
@@ -97,6 +99,10 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 await ws.send_json({"type": "pong", "data": {"t": m.get("t")}})
             elif m.get("type") == "ai_request":
                 app.state.ai.request_manual()
+            elif str(m.get("type", "")).startswith("replay_") or m.get("type") == "replay_ai":
+                task = asyncio.create_task(app.state.replay.command(m))
+                background.add(task)  # keep a reference until done
+                task.add_done_callback(background.discard)
 
     tasks = [asyncio.create_task(pump()), asyncio.create_task(reader())]
     try:

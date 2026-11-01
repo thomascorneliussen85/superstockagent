@@ -33,6 +33,7 @@ from .journal.store import JournalStore
 from .market.demo import DemoMarketSource
 from .market.mt5_source import Mt5MarketSource
 from .market.source import MarketDataSource
+from .replay.engine import ReplayManager
 from .security import OriginPolicy, load_or_create_token
 
 log = logging.getLogger("copilot")
@@ -121,6 +122,7 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         )
         coach.record_versions(settings)
         app.state.coach = coach
+        app.state.replay = ReplayManager(hub, app.state.ai)
         app.state.ai.account = app.state.account
         await hub.start()
         analysis.start()
@@ -134,6 +136,7 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         try:
             yield
         finally:
+            await app.state.replay.stop()
             await coach.stop()
             await journal.stop()
             journal.store.close()

@@ -248,6 +248,73 @@ class AIService:
         self.hub.publish({"type": "ai", "data": msg}, retain=True)
         self.publish_status()
 
+    async def comment_on_replay(self, hub: Any, analysis: Any) -> dict[str, Any]:
+        """One AI comment on *replay* data (only what the replay clock has released).
+
+        Costs count against the same budget, but replay comments are not stored as
+        live AI suggestions, so they never mix into the live accuracy statistics.
+        """
+        if self.commentator is None:
+            return {"error": self.disabled_reason or "AI er ikke tilgjengelig."}
+        worst = worst_case_cost_usd(self.commentator.model, EST_INPUT_TOKENS, self.commentator.max_tokens)
+        blocked = self.budget.check(self._now(), worst)
+        if blocked:
+            return {"error": blocked}
+        tick = hub.stats.last_tick
+        if tick is None or analysis.last is None:
+            return {"error": "Replay har ingen data ennå."}
+        sim_now = datetime.fromtimestamp(tick.time_ms / 1000, tz=OSLO)
+        snap = build_snapshot(
+            analysis.last,
+            hub.spec,
+            tick,
+            hub.candles(Timeframe.M1),
+            hub.candles(Timeframe.M5),
+            ["replay: brukeren ba om en vurdering"],
+            sim_now,
+        )
+        res = await self.commentator.comment(snap)
+        self.ledger.record_call(
+            ts_ms=int(time.time() * 1000),
+            model=res.model,
+            served_model=res.served_model,
+            trigger="replay",
+            input_tokens=res.input_tokens,
+            output_tokens=res.output_tokens,
+            cache_read_tokens=res.cache_read_tokens,
+            cache_write_tokens=res.cache_write_tokens,
+            cost_usd=res.cost_usd,
+            ok=int(res.ok),
+            error=res.error,
+            stop_reason=res.stop_reason,
+            request_id=res.request_id,
+        )
+        self.publish_status()
+        if not res.ok:
+            return {"error": res.error}
+        data = res.data or {}
+        a1 = (analysis.last.get("timeframes") or {}).get("1m") or {}
+        checked, rejected = validate_setup(
+            data.get("setup") or {}, tick.bid, tick.ask, a1.get("atr"), hub.spec.digits
+        )
+        return {
+            "id": -int(time.time() * 1000),
+            "createdAt": tick.time_ms,
+            "tickTime": tick.time_ms,
+            "price": {"bid": tick.bid, "ask": tick.ask},
+            "atr1m": a1.get("atr"),
+            "summary": str(data.get("summary", "")).strip(),
+            "bias": data.get("bias", "neutral"),
+            "setup": checked,
+            "setupRejected": rejected,
+            "warnings": [str(w) for w in data.get("warnings", [])][:5],
+            "reasons": ["replay"],
+            "manual": True,
+            "model": res.served_model or res.model,
+            "costNok": round(res.cost_usd * self.usd_nok, 3),
+            "tokens": {"in": res.input_tokens, "out": res.output_tokens},
+        }
+
     async def generate_text(
         self, system: str, user: str, schema: dict[str, Any], trigger: str, max_tokens: int = 3000
     ) -> tuple[dict[str, Any] | None, str | None]:
