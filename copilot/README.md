@@ -19,7 +19,7 @@ copilot/
 
 ```powershell
 cd copilot\backend
-py -3.12 -m venv .venv
+py -3.14 -m venv .venv   # 3.12–3.14; MetaTrader5 does not support 3.15 yet
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
 python -m app
