@@ -21,9 +21,12 @@ from .ai.ledger import Ledger
 from .ai.llm import ClaudeCommentator
 from .ai.service import AIService
 from .analysis.service import AnalysisService
+from .api import journal as journal_api
 from .api import routes, ws
 from .config import Settings, TradingMode, get_settings
 from .hub import MarketHub
+from .journal.service import JournalService
+from .journal.store import JournalStore
 from .market.demo import DemoMarketSource
 from .market.mt5_source import Mt5MarketSource
 from .market.source import MarketDataSource
@@ -98,18 +101,25 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
             settings.risk_near_sl_fraction,
             settings.risk_min_margin_level_pct,
         )
-        app.state.account = AccountMonitor(hub, analysis, rules)
+        journal = JournalService(
+            hub, JournalStore(settings.data_dir / "copilot.db", settings.data_dir / "screenshots")
+        )
+        app.state.journal = journal
+        app.state.account = AccountMonitor(hub, analysis, rules, journal=journal)
         app.state.ai.account = app.state.account
         await hub.start()
         analysis.start()
         app.state.ai.start()
         app.state.account.start()
+        journal.start()
         log.info(
             "AI Trading Copilot backend %s started (mode=%s, read-only)", __version__, settings.mode.value
         )
         try:
             yield
         finally:
+            await journal.stop()
+            journal.store.close()
             await app.state.account.stop()
             await app.state.ai.stop()
             app.state.ai.ledger.close()
@@ -123,10 +133,11 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         CORSMiddleware,
         allow_origins=policy.cors_origins,
         allow_origin_regex=policy.cors_origin_regex,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.include_router(routes.router)
+    app.include_router(journal_api.router)
     app.include_router(ws.router)
     return app
 

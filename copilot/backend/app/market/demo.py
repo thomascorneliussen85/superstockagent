@@ -84,9 +84,7 @@ def generate_demo_history(
 class DemoTickGenerator:
     """Pure, seedable tick generator (no I/O) - easy to test."""
 
-    def __init__(
-        self, symbol: str, start_price: float, start_ms: int, seed: int | None = None
-    ) -> None:
+    def __init__(self, symbol: str, start_price: float, start_ms: int, seed: int | None = None) -> None:
         self.symbol = symbol
         self.rng = random.Random(seed)
         self.mid = start_price

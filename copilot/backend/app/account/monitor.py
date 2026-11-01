@@ -28,8 +28,15 @@ def oslo_day_start_utc_ms(now: datetime) -> int:
 
 class AccountMonitor:
     def __init__(
-        self, hub: MarketHub, analysis: Any, rules: RiskRules, interval: float = 1.0, now: Any = None
+        self,
+        hub: MarketHub,
+        analysis: Any,
+        rules: RiskRules,
+        interval: float = 1.0,
+        now: Any = None,
+        journal: Any = None,
     ) -> None:
+        self.journal = journal
         self.hub = hub
         self.analysis = analysis
         self.rules = rules
@@ -61,6 +68,8 @@ class AccountMonitor:
             if raw is None:
                 view = {"available": False, "reason": "Venter på MT5-kontoen …"}
             else:
+                if self.journal is not None:
+                    self.journal.on_live_positions(raw.get("positions", []), self.analysis.last)
                 atr, spread_high = self._context()
                 view = build_account_view(raw, self.rules, atr, spread_high)
         if view != self._last_sent:

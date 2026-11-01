@@ -52,7 +52,10 @@ _DEFAULTS = {
     "POSITION_TYPE_SELL": 1,
     "DEAL_TYPE_BUY": 0,
     "DEAL_TYPE_SELL": 1,
+    "COPY_TICKS_ALL": -1,
 }
+
+_TF_CODES = {"1m": "TIMEFRAME_M1", "5m": "TIMEFRAME_M5", "15m": "TIMEFRAME_M15", "1h": "TIMEFRAME_H1"}
 
 HALF_HOUR_MS = 30 * 60 * 1000
 OFFSET_FILE = "mt5_utc_offset.json"
@@ -140,9 +143,7 @@ class Mt5MarketSource:
         mt5 = self._mt5
         ok = mt5.initialize(path=self._terminal_path) if self._terminal_path else mt5.initialize()
         if not ok:
-            raise self._err(
-                "Fikk ikke kontakt med MT5-terminalen. Er MetaTrader 5 startet og innlogget?"
-            )
+            raise self._err("Fikk ikke kontakt med MT5-terminalen. Er MetaTrader 5 startet og innlogget?")
         acc = mt5.account_info()
         if acc is None:
             raise self._err("MT5 er startet, men ingen konto er innlogget")
@@ -261,6 +262,7 @@ class Mt5MarketSource:
             source="mt5",
             tick_value=float(info.trade_tick_value),
             tick_size=float(info.trade_tick_size),
+            tick_value_loss=float(getattr(info, "trade_tick_value_loss", 0) or 0) or None,
             broker_symbol=broker,
             currency_account=(self.account or {}).get("currency"),
         )
@@ -411,9 +413,12 @@ class Mt5MarketSource:
         for d in mt5.history_deals_get(start_s, end_s) or ():
             if d.type not in trade_types:
                 continue  # deposits, withdrawals, credit etc.
-            realized += float(d.profit) + float(getattr(d, "swap", 0) or 0) + float(
-                getattr(d, "commission", 0) or 0
-            ) + float(getattr(d, "fee", 0) or 0)
+            realized += (
+                float(d.profit)
+                + float(getattr(d, "swap", 0) or 0)
+                + float(getattr(d, "commission", 0) or 0)
+                + float(getattr(d, "fee", 0) or 0)
+            )
             if getattr(d, "entry", 0) in (1, 2, 3):  # OUT, INOUT, OUT_BY
                 closed += 1
         orders = mt5.orders_get()
@@ -441,6 +446,150 @@ class Mt5MarketSource:
             return None
         return await self._call(self._account_sync, day_start_utc_ms)
 
+    # ---- history for the journal, coach and replay (read-only) -----------------
+    def _ensure_mt5(self) -> Any:
+        if self._mt5 is None:
+            raise Mt5Error("MT5 er ikke tilkoblet ennå")
+        return self._mt5
+
+    def _deals_sync(self, from_utc_ms: int, to_utc_ms: int) -> list[dict[str, Any]]:
+        mt5 = self._ensure_mt5()
+        a = (from_utc_ms + self.offset_ms) // 1000
+        b = (to_utc_ms + self.offset_ms) // 1000 + 1
+        out = []
+        for d in mt5.history_deals_get(a, b) or ():
+            out.append(
+                {
+                    "ticket": int(d.ticket),
+                    "order": int(getattr(d, "order", 0) or 0),
+                    "positionId": int(getattr(d, "position_id", 0) or 0),
+                    "timeMs": self._to_utc(int(getattr(d, "time_msc", 0) or int(d.time) * 1000)),
+                    "type": int(d.type),
+                    "entry": int(getattr(d, "entry", 0) or 0),
+                    "reason": int(getattr(d, "reason", 0) or 0),
+                    "symbol": str(d.symbol),
+                    "volume": float(d.volume),
+                    "price": float(d.price),
+                    "profit": float(d.profit),
+                    "commission": float(getattr(d, "commission", 0) or 0),
+                    "swap": float(getattr(d, "swap", 0) or 0),
+                    "fee": float(getattr(d, "fee", 0) or 0),
+                    "magic": int(getattr(d, "magic", 0) or 0),
+                    "comment": str(getattr(d, "comment", "") or ""),
+                }
+            )
+        return out
+
+    async def history_deals(self, from_utc_ms: int, to_utc_ms: int) -> list[dict[str, Any]]:
+        return await self._call(self._deals_sync, from_utc_ms, to_utc_ms)
+
+    def _orders_sync(self, position_id: int) -> list[dict[str, Any]]:
+        mt5 = self._ensure_mt5()
+        out = []
+        for o in mt5.history_orders_get(position=position_id) or ():
+            out.append(
+                {
+                    "ticket": int(o.ticket),
+                    "sl": float(getattr(o, "sl", 0) or 0),
+                    "tp": float(getattr(o, "tp", 0) or 0),
+                    "timeMs": self._to_utc(int(getattr(o, "time_setup_msc", 0) or int(o.time_setup) * 1000)),
+                }
+            )
+        return out
+
+    async def history_orders(self, position_id: int) -> list[dict[str, Any]]:
+        return await self._call(self._orders_sync, position_id)
+
+    def _symbol_name(self, symbol: str) -> str:
+        return (
+            self._broker_symbol
+            if self._spec and symbol == self._spec.symbol and self._broker_symbol
+            else symbol
+        )
+
+    def _rows_to_candles(self, rows: Any, tf: Timeframe, symbol: str, point: float) -> list[Candle]:
+        out = []
+        for i in range(len(rows) if rows is not None else 0):
+            r = rows[i]
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=tf,
+                    open_time_ms=self._to_utc(int(r["time"]) * 1000),
+                    open=float(r["open"]),
+                    high=float(r["high"]),
+                    low=float(r["low"]),
+                    close=float(r["close"]),
+                    tick_count=int(r["tick_volume"]),
+                    max_spread=float(r["spread"]) * point,
+                    closed=True,
+                )
+            )
+        return out
+
+    def _rates_before_sync(self, symbol: str, tf: Timeframe, until_utc_ms: int, count: int) -> list[Candle]:
+        mt5 = self._ensure_mt5()
+        code = (
+            _c(mt5, _TF_CODES[tf.value])
+            if hasattr(mt5, _TF_CODES[tf.value])
+            else _DEFAULTS[_TF_CODES[tf.value]]
+        )
+        rows = mt5.copy_rates_from(
+            self._symbol_name(symbol), code, (until_utc_ms + self.offset_ms) // 1000, count + 1
+        )
+        point = self._spec.point if self._spec else 0.01
+        # Only bars that had fully closed at `until` - never the bar containing it (no look-ahead).
+        return [
+            c
+            for c in self._rows_to_candles(rows, tf, symbol, point)
+            if c.open_time_ms + tf.ms <= until_utc_ms
+        ][-count:]
+
+    async def rates_before(self, symbol: str, tf: Timeframe, until_utc_ms: int, count: int) -> list[Candle]:
+        return await self._call(self._rates_before_sync, symbol, tf, until_utc_ms, count)
+
+    def _rates_range_sync(self, symbol: str, tf: Timeframe, from_utc_ms: int, to_utc_ms: int) -> list[Candle]:
+        mt5 = self._ensure_mt5()
+        code = (
+            _c(mt5, _TF_CODES[tf.value])
+            if hasattr(mt5, _TF_CODES[tf.value])
+            else _DEFAULTS[_TF_CODES[tf.value]]
+        )
+        rows = mt5.copy_rates_range(
+            self._symbol_name(symbol),
+            code,
+            (from_utc_ms + self.offset_ms) // 1000,
+            (to_utc_ms + self.offset_ms) // 1000,
+        )
+        point = self._spec.point if self._spec else 0.01
+        return self._rows_to_candles(rows, tf, symbol, point)
+
+    async def rates_range(self, symbol: str, tf: Timeframe, from_utc_ms: int, to_utc_ms: int) -> list[Candle]:
+        return await self._call(self._rates_range_sync, symbol, tf, from_utc_ms, to_utc_ms)
+
+    def _ticks_range_sync(self, symbol: str, from_utc_ms: int, to_utc_ms: int) -> list[Tick]:
+        mt5 = self._ensure_mt5()
+        rows = mt5.copy_ticks_range(
+            self._symbol_name(symbol),
+            (from_utc_ms + self.offset_ms) // 1000,
+            (to_utc_ms + self.offset_ms) // 1000 + 1,
+            _c(mt5, "COPY_TICKS_INFO"),
+        )
+        out: list[Tick] = []
+        bid = ask = None
+        for i in range(len(rows) if rows is not None else 0):
+            r = rows[i]
+            bid = float(r["bid"]) or bid
+            ask = float(r["ask"]) or ask
+            t = self._to_utc(int(r["time_msc"]))
+            if bid and ask and ask >= bid and from_utc_ms <= t <= to_utc_ms:
+                out.append(Tick(symbol, t, bid, ask, 1.0))
+        return out
+
+    async def ticks_range(self, symbol: str, from_utc_ms: int, to_utc_ms: int) -> list[Tick]:
+        """Real historical bid/ask ticks (broker history depth varies, often months)."""
+        return await self._call(self._ticks_range_sync, symbol, from_utc_ms, to_utc_ms)
+
     async def close(self) -> None:
         self._closed = True
         self._broker_symbol = None
@@ -460,9 +609,7 @@ def select_new_ticks(batch: list[Any], last_msc: int, seen_at_last: int) -> tupl
     remember how many at ``last_msc`` were already delivered.
     """
     same = [t for t in batch if int(t["time_msc"]) == last_msc]
-    newer = sorted(
-        (t for t in batch if int(t["time_msc"]) > last_msc), key=lambda t: int(t["time_msc"])
-    )
+    newer = sorted((t for t in batch if int(t["time_msc"]) > last_msc), key=lambda t: int(t["time_msc"]))
     new = same[seen_at_last:] + newer
     if newer:
         last_msc = int(newer[-1]["time_msc"])

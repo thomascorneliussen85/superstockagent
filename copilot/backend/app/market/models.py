@@ -114,6 +114,8 @@ class SymbolSpec:
     #: Value of one ``tick_size`` price move for 1.0 lot, in the account currency (MT5).
     tick_value: float | None = None
     tick_size: float | None = None
+    #: Tick value used for losses (MT5 trade_tick_value_loss); differs slightly for non-USD accounts.
+    tick_value_loss: float | None = None
     #: The broker's own name for the instrument (e.g. "XAUUSD.m", "GOLD").
     broker_symbol: str | None = None
     #: Account currency the tick_value is expressed in.

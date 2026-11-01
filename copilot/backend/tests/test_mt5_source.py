@@ -58,6 +58,24 @@ class FakeMT5:
         self.deal_query = (date_from, date_to)
         return self.deals
 
+    hist_orders = {}
+
+    def history_orders_get(self, position=None):
+        return self.hist_orders.get(position, ())
+
+    def copy_rates_from(self, name, tf, date_from, count):
+        minute = 60
+        last = (date_from // minute) * minute
+        return [{"time": last - (count - 1 - i) * minute, "open": 4000.0, "high": 4001.0, "low": 3999.0,
+                 "close": 4000.5, "tick_volume": 50, "spread": 25, "real_volume": 0} for i in range(count)]
+
+    def copy_rates_range(self, name, tf, date_from, date_to):
+        return [{"time": t, "open": 4000.0, "high": 4001.0, "low": 3999.0, "close": 4000.5, "tick_volume": 50,
+                 "spread": 25, "real_volume": 0} for t in range((date_from // 60) * 60, date_to, 60)]
+
+    def copy_ticks_range(self, name, date_from, date_to, flags):
+        return [t for t in self.ticks if date_from * 1000 <= t["time_msc"] <= date_to * 1000]
+
     def terminal_info(self):
         return SimpleNamespace(connected=self.connected)
 
@@ -281,5 +299,20 @@ def test_account_snapshot_reads_positions_and_todays_deals():
         assert snap["dayRealized"] == -214.0 and snap["dayClosedDeals"] == 1
         # query window is in server time
         assert fake.deal_query[0] == (UTC_NOW - 3_600_000 + OFFSET) // 1000
+
+    asyncio.run(run())
+
+
+def test_rates_before_excludes_bar_containing_the_entry():
+    fake = FakeMT5()
+
+    async def run():
+        src = make(fake)
+        await src.symbol_spec("XAUUSD")
+        entry = UTC_NOW - (UTC_NOW % 60_000) + 30_000  # 30 s into a minute
+        bars = await src.rates_before("XAUUSD", Timeframe.M1, entry, 10)
+        assert len(bars) == 10
+        assert all(b.open_time_ms + 60_000 <= entry for b in bars)  # no look-ahead
+        assert bars[-1].open_time_ms == entry - 30_000 - 60_000
 
     asyncio.run(run())

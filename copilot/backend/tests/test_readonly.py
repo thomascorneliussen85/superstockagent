@@ -27,7 +27,8 @@ def test_mt5_calls_are_read_only():
     allowed = {
         "initialize", "shutdown", "last_error", "account_info", "terminal_info", "symbol_info", "symbols_get",
         "symbol_select", "symbol_info_tick", "copy_rates_from_pos", "copy_ticks_from", "positions_get",
-        "orders_get", "history_deals_get",
+        "orders_get", "history_deals_get", "history_orders_get", "copy_rates_from", "copy_rates_range",
+        "copy_ticks_range",
     }
     text = (APP / "market" / "mt5_source.py").read_text(encoding="utf-8")
     called = set(re.findall(r"\bmt5\.([a-z_]+)\(", text)) | set(re.findall(r"self\._mt5\.([a-z_]+)\(", text))
