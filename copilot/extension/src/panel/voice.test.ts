@@ -48,3 +48,13 @@ describe("AlertGate", () => {
     expect(g.allow({ ...a, key: "k3" }, 70_000, { ...on, types: { ...on.types, setup: false } })).toBe(false);
   });
 });
+
+describe("risk voice alerts", () => {
+  const acct = (keys: { key: string; kind: "sl" | "risk" | "daily" | "spread" }[]) =>
+    st({ account: { available: true, alerts: keys.map((k) => ({ ...k, level: "warn" as const, text: "", ticket: 1 })) } });
+  it("speaks new SL and daily-limit alerts once", () => {
+    const a = alertsBetween(acct([]), acct([{ key: "nearsl:1", kind: "sl" }, { key: "daily:reached", kind: "daily" }]));
+    expect(a.map((x) => x.text)).toEqual(["Stop-lossen nærmer seg.", "Du har nådd din daglige risikogrense."]);
+    expect(alertsBetween(acct([{ key: "nearsl:1", kind: "sl" }]), acct([{ key: "nearsl:1", kind: "sl" }]))).toEqual([]);
+  });
+});

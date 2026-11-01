@@ -2,7 +2,7 @@
 
 A Chrome extension that adds an AI panel to TradingView, plus a local Python backend that reads data from MetaTrader 5. It is built for manual scalping of gold (XAUUSD) on the 1-minute chart.
 
-> **Status: Phase 3 (AI) is done.** Claude writes short Norwegian comments and possible setups when something meaningful happens in the market, within a hard monthly budget; optional Norwegian voice alerts. Phase 2: The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
+> **Status: Phase 4 (trade monitoring) is done.** The **Posisjoner** tab reads your MT5 account and open positions (read-only). It shows risk to stop-loss in money and % of balance, computed from the broker's contract spec, plus today's result against your daily loss limit. It warns about missing SL, oversized risk, price approaching SL, correlated positions, high spread while in a trade and low margin, with optional voice alerts. Phase 3: Claude writes short Norwegian comments and possible setups when something meaningful happens in the market, within a hard monthly budget; optional Norwegian voice alerts. Phase 2: The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
 >
 > The system is **read-only**. It never places, modifies or closes trades. Nothing in it guarantees profit.
 
@@ -64,11 +64,12 @@ This shows the same panel on a mock chart page, connected directly to the backen
 ## Tests
 
 ```bash
-cd copilot/backend && pytest            # 76 tests: AI (budget, triggers, setup validation, real-SDK request
+cd copilot/backend && pytest            # 87 tests: account risk (contract-spec risk, alerts, daily limit,
+                                        # read-only MT5 allow-list),  AI (budget, triggers, setup validation, real-SDK request
                                         # with mocked HTTP, service end-to-end), plus: indicators (RSI checked against Wilder's published values),
                                         # structure/levels/patterns, engine, MT5 source (fake terminal),
                                         # read-only guard, candles, auth/origin, WebSocket, hub
-cd copilot/extension && npm test        # 33 tests: reducer, Norwegian summaries, voice alerts, geometry, WebSocket client
+cd copilot/extension && npm test        # 34 tests: reducer, Norwegian summaries, voice alerts, geometry, WebSocket client
 cd copilot/extension && npm run build   # type-check + production build
 ```
 
@@ -116,6 +117,17 @@ A sum of +2 or more means **Opptrend** (uptrend). −2 or less means **Nedtrend*
   - today's share of what is left (remaining budget ÷ remaining weekdays)
 - **Kept for later learning.** The snapshot and the response are stored separately from trades, for later evaluation.
 - **Voice alerts** are off by default and switched on in the AI tab. They cover setups, 5m/15m breaks and high spread, with cooldowns and deduplication. Only the visible TradingView tab speaks.
+
+## Trade monitoring (Phase 4)
+
+- **Data.** Each second the backend reads `account_info`, `positions_get`, `orders_get` and `history_deals_get` (today's deals). A test fails if the code calls any MT5 function outside a read-only allow-list.
+- **Risk to SL.** Computed as `|entry − SL| / tick_size × tick_value_loss × lots`, using the broker's own values, in the account currency. Example: 0.10 lot (10 oz at 100 oz/lot) with a 2 USD stop risks 20 USD; 10 lots risks 2,000 USD. A stop moved beyond the entry is shown as locked-in profit.
+- **Your rules.** Set in `.env`; they are used only for warnings:
+  - `COPILOT_RISK_MAX_PER_TRADE_PCT` (default 1 %)
+  - `COPILOT_RISK_DAILY_LOSS_LIMIT_PCT` (default 3 % of the day's starting balance)
+  - `COPILOT_RISK_NEAR_SL_FRACTION` (default 25 % of the SL distance left)
+- **Daily result.** Today's closed trades (profit + commission + swap) plus floating P/L, with the day starting at midnight Oslo time.
+- **AI context.** Claude is told about your open gold positions, but is instructed never to tell you to close, add or move anything.
 
 ## Configuration (`copilot/backend/.env`, see `.env.example`)
 

@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..market.models import Candle, SymbolSpec, Tick
 
-PROMPT_VERSION = "3.0.0"
+PROMPT_VERSION = "3.1.0"
 OSLO = ZoneInfo("Europe/Oslo")
 
 SYSTEM_PROMPT = """\
@@ -47,6 +47,10 @@ opposing level or liquidity zone. Account for the spread. Otherwise set directio
 to "none" and the four prices to 0. List the evidence for and against in `supporting` and \
 `conflicting` (short Norwegian phrases), and put risks such as high spread, a nearby opposing \
 level, low volume or an upcoming session change in `warnings`.
+
+If `open_positions` is present, the trader already holds those gold positions: take them \
+into account (for example, mention when the market structure now argues against an open \
+position) but never tell them to close, add to or move anything; that is their decision.
 
 Speak in possibilities ("mulig", "kan"), never certainties. Never promise profit or say a trade \
 will work. You are not giving financial advice; the trader decides and executes everything \

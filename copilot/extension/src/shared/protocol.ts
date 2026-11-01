@@ -181,6 +181,72 @@ export interface AiStatus {
   budget: { monthCapNok: number; monthSpentNok: number; daySpentNok: number; dayAllowanceNok: number; callsToday: number };
 }
 
+// ---- Account & positions (backend app/account/risk.py), read-only ----
+export interface PositionView {
+  ticket: number;
+  symbol: string;
+  type: "buy" | "sell";
+  volume: number;
+  oz: number;
+  digits: number;
+  priceOpen: number;
+  priceCurrent: number;
+  sl: number;
+  tp: number;
+  profit: number;
+  swap: number;
+  timeMs: number;
+  riskMoney: number | null;
+  riskPct: number | null;
+  lockedMoney: number | null;
+  toSlMoney: number | null;
+  distToSl: number | null;
+  distToSlAtr: number | null;
+  slProgress: number | null;
+  distToTp: number | null;
+  rMultiple: number | null;
+}
+
+export interface RiskAlert {
+  key: string;
+  level: "critical" | "warn" | "info";
+  text: string;
+  ticket: number | null;
+  kind: "risk" | "sl" | "daily" | "spread";
+}
+
+export interface AccountView {
+  available: boolean;
+  reason?: string;
+  account?: {
+    login: number;
+    currency: string;
+    balance: number;
+    equity: number;
+    profit: number;
+    margin: number;
+    marginFree: number;
+    marginLevel: number;
+    tradeMode: "demo" | "live";
+  };
+  positions?: PositionView[];
+  pendingOrders?: number;
+  day?: {
+    realized: number;
+    floating: number;
+    result: number;
+    startBalance: number;
+    limitMoney: number;
+    limitPct: number;
+    usedPct: number | null;
+    openRisk: number;
+    anyWithoutSl: boolean;
+    closedTrades: number;
+  };
+  rules?: { maxPerTradePct: number; dailyLossLimitPct: number };
+  alerts?: RiskAlert[];
+}
+
 export interface TickMsg {
   symbol: string;
   t: number;
@@ -212,6 +278,7 @@ export type ServerMessage =
   | { type: "candles"; data: { tf: Timeframe; candles: CandleMsg[] } }
   | { type: "analysis"; data: Analysis }
   | { type: "ai"; data: AiComment }
+  | { type: "account"; data: AccountView }
   | { type: "ai_status"; data: AiStatus }
   | { type: "pong"; data: { t: number | null } }
   | { type: "error"; data: { code: string } };
@@ -219,7 +286,7 @@ export type ServerMessage =
 export type ClientMessage = { type: "auth"; token: string } | { type: "ping"; t: number } | { type: "ai_request" };
 
 const KNOWN = new Set([
-  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "ai", "ai_status", "pong", "error",
+  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "ai", "ai_status", "account", "pong", "error",
 ]);
 
 /** Parses and minimally validates a server frame. Returns null for unknown/malformed input. */

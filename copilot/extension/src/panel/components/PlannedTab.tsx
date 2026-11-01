@@ -1,17 +1,8 @@
 import type { TabId } from "../App";
 
-type PlannedId = Exclude<TabId, "market" | "analysis" | "signals">;
+type PlannedId = Exclude<TabId, "market" | "analysis" | "signals" | "positions">;
 
 const PLANNED: Record<PlannedId, { phase: string; title: string; items: string[] }> = {
-  positions: {
-    phase: "Fase 4",
-    title: "Posisjoner og risiko (kun lesing)",
-    items: [
-      "Åpne MT5-posisjoner med SL/TP og urealisert P/L",
-      "Risiko i % av konto, basert på faktisk kontraktsspesifikasjon",
-      "Varsler: spread, invalidering nær, daglig risikogrense",
-    ],
-  },
   coach: {
     phase: "Fase 5–6",
     title: "Personlig coach",

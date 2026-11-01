@@ -4,7 +4,7 @@
 import type { MarketState } from "../shared/marketState";
 import type { AnalysisEvent } from "../shared/protocol";
 
-export type AlertType = "setup" | "structure" | "spread";
+export type AlertType = "setup" | "structure" | "spread" | "sl" | "risk";
 
 export interface VoiceSettings {
   enabled: boolean;
@@ -15,7 +15,7 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE: VoiceSettings = {
   enabled: false,
   volume: 0.8,
-  types: { setup: true, structure: true, spread: true },
+  types: { setup: true, structure: true, spread: true, sl: true, risk: true },
 };
 
 export interface Alert {
@@ -63,10 +63,36 @@ export function alertsBetween(prev: MarketState | null, next: MarketState): Aler
       out.push({ type: "spread", key: `spread:${next.analysis.computedAt}`, text: "Spreaden er uvanlig høy." });
     }
   }
+  // Account / position risk alerts (spoken once per key while the condition lasts).
+  const before = new Set((prev.account?.alerts ?? []).map((a) => a.key));
+  for (const a of next.account?.alerts ?? []) {
+    if (before.has(a.key) || a.level === "info") continue;
+    const spoken = spokenRisk(a.key, a.kind);
+    if (spoken) out.push(spoken);
+  }
   return out;
 }
 
-export const COOLDOWN_MS: Record<AlertType, number> = { setup: 60_000, structure: 45_000, spread: 120_000 };
+function spokenRisk(key: string, kind: string): Alert | null {
+  const k = key.split(":")[0];
+  if (kind === "sl") return { type: "sl", key, text: "Stop-lossen nærmer seg." };
+  if (k === "nosl") return { type: "risk", key, text: "En åpen posisjon mangler stop-loss." };
+  if (k === "risk") return { type: "risk", key, text: "Posisjonen risikerer mer enn din grense." };
+  if (key === "daily:reached") return { type: "risk", key, text: "Du har nådd din daglige risikogrense." };
+  if (key === "daily:near") return { type: "risk", key, text: "Du er nær din daglige risikogrense." };
+  if (k === "corr") return { type: "risk", key, text: "Du har flere korrelerte posisjoner." };
+  if (k === "margin") return { type: "risk", key, text: "Marginnivået er lavt." };
+  if (kind === "spread") return { type: "spread", key, text: "Spreaden har økt kraftig." };
+  return null;
+}
+
+export const COOLDOWN_MS: Record<AlertType, number> = {
+  setup: 60_000,
+  structure: 45_000,
+  spread: 120_000,
+  sl: 20_000,
+  risk: 60_000,
+};
 const GLOBAL_GAP_MS = 8_000;
 
 /** Drops duplicates, alerts inside their type cooldown, and anything too soon after the last spoken alert. */

@@ -48,6 +48,10 @@ _DEFAULTS = {
     "ACCOUNT_TRADE_MODE_DEMO": 0,
     "ACCOUNT_TRADE_MODE_CONTEST": 1,
     "ACCOUNT_TRADE_MODE_REAL": 2,
+    "POSITION_TYPE_BUY": 0,
+    "POSITION_TYPE_SELL": 1,
+    "DEAL_TYPE_BUY": 0,
+    "DEAL_TYPE_SELL": 1,
 }
 
 HALF_HOUR_MS = 30 * 60 * 1000
@@ -358,6 +362,84 @@ class Mt5MarketSource:
                 last_health = time.monotonic()
             if len(batch) < TICK_BATCH:
                 await asyncio.sleep(self._poll)
+
+    # ---- account & positions (read-only) -------------------------------------
+    def _account_sync(self, day_start_utc_ms: int) -> dict[str, Any] | None:
+        mt5 = self._mt5
+        acc = mt5.account_info()
+        if acc is None:
+            return None
+        positions = []
+        specs: dict[str, dict[str, Any]] = {}
+        for p in mt5.positions_get() or ():
+            sym = p.symbol
+            if sym not in specs:
+                info = mt5.symbol_info(sym)
+                tick = mt5.symbol_info_tick(sym)
+                specs[sym] = {
+                    "digits": int(getattr(info, "digits", 2)) if info else 2,
+                    "contractSize": float(getattr(info, "trade_contract_size", 0) or 0) if info else 0.0,
+                    "tickSize": float(getattr(info, "trade_tick_size", 0) or 0) if info else 0.0,
+                    "tickValue": float(getattr(info, "trade_tick_value", 0) or 0) if info else 0.0,
+                    "tickValueLoss": float(getattr(info, "trade_tick_value_loss", 0) or 0) if info else 0.0,
+                    "bid": float(tick.bid) if tick else None,
+                    "ask": float(tick.ask) if tick else None,
+                }
+            positions.append(
+                {
+                    "ticket": int(p.ticket),
+                    "symbol": sym,
+                    "type": "buy" if p.type == _c(mt5, "POSITION_TYPE_BUY") else "sell",
+                    "volume": float(p.volume),
+                    "priceOpen": float(p.price_open),
+                    "priceCurrent": float(p.price_current),
+                    "sl": float(p.sl or 0),
+                    "tp": float(p.tp or 0),
+                    "profit": float(p.profit),
+                    "swap": float(getattr(p, "swap", 0) or 0),
+                    "timeMs": self._to_utc(int(getattr(p, "time_msc", 0) or int(p.time) * 1000)),
+                    "comment": str(getattr(p, "comment", "") or ""),
+                    "spec": specs[sym],
+                }
+            )
+        # Realized result today: all trade deals since local midnight (server-time scale).
+        start_s = (day_start_utc_ms + self.offset_ms) // 1000
+        end_s = (self._wall_ms() + self.offset_ms) // 1000 + 3600
+        realized = 0.0
+        closed = 0
+        trade_types = {_c(mt5, "DEAL_TYPE_BUY"), _c(mt5, "DEAL_TYPE_SELL")}
+        for d in mt5.history_deals_get(start_s, end_s) or ():
+            if d.type not in trade_types:
+                continue  # deposits, withdrawals, credit etc.
+            realized += float(d.profit) + float(getattr(d, "swap", 0) or 0) + float(
+                getattr(d, "commission", 0) or 0
+            ) + float(getattr(d, "fee", 0) or 0)
+            if getattr(d, "entry", 0) in (1, 2, 3):  # OUT, INOUT, OUT_BY
+                closed += 1
+        orders = mt5.orders_get()
+        return {
+            "account": {
+                "login": acc.login,
+                "currency": acc.currency,
+                "balance": float(acc.balance),
+                "equity": float(acc.equity),
+                "profit": float(acc.profit),
+                "margin": float(acc.margin),
+                "marginFree": float(acc.margin_free),
+                "marginLevel": float(acc.margin_level or 0),
+                "tradeMode": "live" if acc.trade_mode == _c(mt5, "ACCOUNT_TRADE_MODE_REAL") else "demo",
+            },
+            "positions": positions,
+            "pendingOrders": len(orders or ()),
+            "dayRealized": realized,
+            "dayClosedDeals": closed,
+        }
+
+    async def account_snapshot(self, day_start_utc_ms: int) -> dict[str, Any] | None:
+        """Account, open positions and today's realized P/L. Read-only."""
+        if self._mt5 is None or self._broker_symbol is None:
+            return None
+        return await self._call(self._account_sync, day_start_utc_ms)
 
     async def close(self) -> None:
         self._closed = True

@@ -20,3 +20,15 @@ def test_no_trading_calls_in_backend():
                 offenders.append(f"{path.name}:{line}: {src_line.strip()}")
         offenders += [f"{path.name}: {m.group(0)}" for m in FORBIDDEN.finditer(text)]
     assert offenders == []
+
+
+def test_mt5_calls_are_read_only():
+    """Every MetaTrader5 function the app calls must be on the read-only allow-list."""
+    allowed = {
+        "initialize", "shutdown", "last_error", "account_info", "terminal_info", "symbol_info", "symbols_get",
+        "symbol_select", "symbol_info_tick", "copy_rates_from_pos", "copy_ticks_from", "positions_get",
+        "orders_get", "history_deals_get",
+    }
+    text = (APP / "market" / "mt5_source.py").read_text(encoding="utf-8")
+    called = set(re.findall(r"\bmt5\.([a-z_]+)\(", text)) | set(re.findall(r"self\._mt5\.([a-z_]+)\(", text))
+    assert called and called <= allowed, called - allowed

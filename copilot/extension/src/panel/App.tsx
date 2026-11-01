@@ -7,6 +7,7 @@ import { PanelFrame } from "./components/PanelFrame";
 import { AnalysisTab } from "./components/AnalysisTab";
 import { MarketTab } from "./components/MarketTab";
 import { PlannedTab } from "./components/PlannedTab";
+import { PositionsTab } from "./components/PositionsTab";
 import { SignalsTab } from "./components/SignalsTab";
 import { StatusBar } from "./components/StatusBar";
 import { usePanelData } from "./usePanel";
@@ -85,6 +86,13 @@ export function App({ transport, store }: Props) {
               }`}
             >
               {t.label}
+              {t.id === "positions" && (data.market.account?.alerts?.length ?? 0) > 0 && (
+                <span
+                  className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                    data.market.account?.alerts?.some((a) => a.level === "critical") ? "bg-tv-down" : "bg-tv-amber"
+                  }`}
+                />
+              )}
             </button>
           ))}
         </nav>
@@ -101,6 +109,8 @@ export function App({ transport, store }: Props) {
               voice={voice}
               onVoice={updateVoice}
             />
+          ) : tab === "positions" ? (
+            <PositionsTab market={data.market} />
           ) : (
             <PlannedTab tab={tab} />
           )}

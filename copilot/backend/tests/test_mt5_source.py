@@ -39,9 +39,24 @@ class FakeMT5:
     def last_error(self):
         return (-10004, "No IPC connection")
 
+    positions = ()
+    deals = ()
+    orders = ()
+
     def account_info(self):
         return SimpleNamespace(login=123, server="Broker-Demo", company="Broker", currency="NOK",
-                               trade_mode=self.trade_mode, leverage=100)
+                               trade_mode=self.trade_mode, leverage=100, balance=10_000.0, equity=9_950.0,
+                               profit=-50.0, margin=400.0, margin_free=9_550.0, margin_level=2487.5)
+
+    def positions_get(self):
+        return self.positions
+
+    def orders_get(self):
+        return self.orders
+
+    def history_deals_get(self, date_from, date_to):
+        self.deal_query = (date_from, date_to)
+        return self.deals
 
     def terminal_info(self):
         return SimpleNamespace(connected=self.connected)
@@ -51,7 +66,7 @@ class FakeMT5:
             return None
         return SimpleNamespace(name=name, digits=2, point=0.01, trade_contract_size=100.0, volume_min=0.01,
                                volume_step=0.01, volume_max=50.0, currency_profit="USD", description="Gold",
-                               trade_tick_value=9.9, trade_tick_size=0.01)
+                               trade_tick_value=9.9, trade_tick_size=0.01, trade_tick_value_loss=10.0)
 
     def symbols_get(self, group=""):
         pat = group.strip("*")
@@ -237,5 +252,34 @@ def test_terminal_disconnect_raises():
         await src.symbol_spec("XAUUSD")
         with pytest.raises(Mt5Error, match="forbindelsen"):
             src._health_sync()
+
+    asyncio.run(run())
+
+
+def test_account_snapshot_reads_positions_and_todays_deals():
+    fake = FakeMT5()
+    opened = fake.server_now - 60_000
+    fake.positions = (
+        SimpleNamespace(ticket=7, symbol="XAUUSD.m", type=0, volume=0.1, price_open=4000.0, price_current=3999.0,
+                        sl=3998.0, tp=4004.0, profit=-100.0, swap=0.0, time=0, time_msc=opened,
+                        comment=""),
+    )
+    fake.deals = (
+        SimpleNamespace(type=0, entry=0, profit=0.0, swap=0.0, commission=-7.0, fee=0.0),  # entry
+        SimpleNamespace(type=1, entry=1, profit=-200.0, swap=0.0, commission=-7.0, fee=0.0),  # close
+        SimpleNamespace(type=2, entry=0, profit=5000.0, swap=0.0, commission=0.0, fee=0.0),  # deposit: ignored
+    )
+
+    async def run():
+        src = make(fake)
+        await src.symbol_spec("XAUUSD")
+        snap = await src.account_snapshot(UTC_NOW - 3_600_000)
+        assert snap["account"]["balance"] == 10_000.0 and snap["account"]["tradeMode"] == "demo"
+        p = snap["positions"][0]
+        assert p["type"] == "buy" and p["spec"]["tickValueLoss"] == 10.0
+        assert p["timeMs"] == opened - OFFSET
+        assert snap["dayRealized"] == -214.0 and snap["dayClosedDeals"] == 1
+        # query window is in server time
+        assert fake.deal_query[0] == (UTC_NOW - 3_600_000 + OFFSET) // 1000
 
     asyncio.run(run())

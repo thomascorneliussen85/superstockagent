@@ -152,7 +152,13 @@ function Budget({ st }: { st: NonNullable<MarketState["aiStatus"]> }) {
   );
 }
 
-const TYPE_LABEL: Record<AlertType, string> = { setup: "Mulige oppsett", structure: "Brudd (5m/15m)", spread: "Høy spread" };
+const TYPE_LABEL: Record<AlertType, string> = {
+  setup: "Mulige oppsett",
+  structure: "Brudd (5m/15m)",
+  spread: "Høy spread",
+  sl: "Stop-loss nær",
+  risk: "Risiko og dagsgrense",
+};
 
 function VoicePanel({ voice, onVoice }: { voice: VoiceSettings; onVoice(v: VoiceSettings): void }) {
   return (

@@ -14,6 +14,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .account.monitor import AccountMonitor
+from .account.risk import RiskRules
 from .ai.budget import BudgetGuard
 from .ai.ledger import Ledger
 from .ai.llm import ClaudeCommentator
@@ -90,15 +92,25 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         analysis = AnalysisService(hub, interval=settings.analysis_interval_seconds)
         app.state.analysis = analysis
         app.state.ai = build_ai(settings, hub, analysis)
+        rules = RiskRules(
+            settings.risk_max_per_trade_pct,
+            settings.risk_daily_loss_limit_pct,
+            settings.risk_near_sl_fraction,
+            settings.risk_min_margin_level_pct,
+        )
+        app.state.account = AccountMonitor(hub, analysis, rules)
+        app.state.ai.account = app.state.account
         await hub.start()
         analysis.start()
         app.state.ai.start()
+        app.state.account.start()
         log.info(
             "AI Trading Copilot backend %s started (mode=%s, read-only)", __version__, settings.mode.value
         )
         try:
             yield
         finally:
+            await app.state.account.stop()
             await app.state.ai.stop()
             app.state.ai.ledger.close()
             await analysis.stop()

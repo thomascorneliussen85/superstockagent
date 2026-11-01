@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     ai_allow_demo: bool = False  # don't spend money on synthetic prices by default
     ai_fallbacks: bool = True  # server-side fallback model if Claude declines a request
 
+    # --- Your personal risk rules (only used for warnings; nothing is ever enforced on MT5).
+    risk_max_per_trade_pct: float = 1.0  # warn when one position risks more than this % of balance
+    risk_daily_loss_limit_pct: float = 3.0  # daily loss limit in % of the day's starting balance
+    risk_near_sl_fraction: float = 0.25  # "approaching SL" when this share of the SL distance is left
+    risk_min_margin_level_pct: float = 200.0
+
     @field_validator("host")
     @classmethod
     def _local_only(cls, v: str) -> str:

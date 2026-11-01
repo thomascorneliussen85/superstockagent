@@ -72,6 +72,7 @@ class AIService:
         self.history: deque[dict[str, Any]] = deque(maxlen=20)
         self.last_status: dict[str, Any] = {}
         self._task: asyncio.Task | None = None
+        self.account: Any = None  # AccountMonitor, set by the app (optional)
 
     # ---- public --------------------------------------------------------------
     def request_manual(self) -> None:
@@ -165,6 +166,20 @@ class AIService:
             reasons,
             now,
         )
+        view = getattr(self.account, "last", None) or {}
+        if view.get("available"):
+            snapshot["open_positions"] = [
+                {
+                    "side": "long" if p["type"] == "buy" else "short",
+                    "lots": p["volume"],
+                    "entry": p["priceOpen"],
+                    "sl": p["sl"] or None,
+                    "tp": p["tp"] or None,
+                    "pnl": round(p["profit"], 2),
+                }
+                for p in view.get("positions", [])
+                if p["symbol"].upper().startswith(("XAU", "GOLD"))
+            ]
         self._busy = True
         self._last_call_at = self._clock()
         self.publish_status()
