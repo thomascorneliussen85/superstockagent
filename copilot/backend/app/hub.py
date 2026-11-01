@@ -6,6 +6,8 @@ Design notes
 * Each subscriber has a bounded queue. If a slow client falls behind, the
   oldest messages are dropped (ticks are conflatable; the next tick or
   candle supersedes them) - a slow UI never blocks the feed.
+* On (re)connect the hub seeds its candle history from the source (MT5 bars)
+  so indicators such as EMA 200 are available immediately.
 * Freshness is tracked from the last tick's arrival time, and a ``status``
   message is pushed whenever it changes (live <-> stale <-> disconnected).
 * The producer task restarts the source with exponential backoff on errors
@@ -20,7 +22,7 @@ import logging
 import time
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .market.candles import CandleBuilder
@@ -30,7 +32,9 @@ from .market.source import MarketDataSource
 log = logging.getLogger(__name__)
 
 TIMEFRAMES = (Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1)
-HISTORY_LEN = 300  # closed candles kept per timeframe for new clients
+HISTORY_LEN = 500  # closed candles kept per timeframe (EMA 200 needs >= 200)
+SNAPSHOT_CANDLES = 120  # candles per timeframe sent to a newly connected client
+SPREAD_WINDOW = 3000  # recent ticks used for spread statistics
 
 
 class FeedState:
@@ -67,6 +71,7 @@ class HubStats:
     history: dict[Timeframe, deque[Candle]] = field(
         default_factory=lambda: {tf: deque(maxlen=HISTORY_LEN) for tf in TIMEFRAMES}
     )
+    spreads: deque[float] = field(default_factory=lambda: deque(maxlen=SPREAD_WINDOW))
 
 
 class MarketHub:
@@ -82,7 +87,7 @@ class MarketHub:
         self._initial_backoff = initial_backoff_seconds
         self.source = source
         self.symbol = symbol
-        self.mode = mode
+        self.configured_mode = mode
         self.stale_after_ms = int(stale_after_seconds * 1000)
         self._wall_ms = wall_ms or (lambda: int(time.time() * 1000))
         self.spec: SymbolSpec | None = None
@@ -90,6 +95,17 @@ class MarketHub:
         self._builders = {tf: CandleBuilder(symbol, tf) for tf in TIMEFRAMES}
         self._subs: set[Subscriber] = set()
         self._tasks: list[asyncio.Task] = []
+        self._retained: dict[str, dict[str, Any]] = {}
+        #: Increments on every change of market data; consumers poll it.
+        self.version = 0
+        #: Increments whenever any timeframe closes a candle.
+        self.closed_version = 0
+
+    # ---- derived info ----------------------------------------------------
+    @property
+    def mode(self) -> str:
+        """Actual mode. For MT5 this reflects the real account type (demo/live)."""
+        return getattr(self.source, "resolved_mode", None) or self.configured_mode
 
     # ---- lifecycle -------------------------------------------------------
     async def start(self) -> None:
@@ -122,6 +138,23 @@ class MarketHub:
         for sub in list(self._subs):
             sub.offer(msg)
 
+    def publish(self, msg: dict[str, Any], retain: bool = False) -> None:
+        """Send a message to all clients; retained messages are replayed to new clients."""
+        if retain:
+            self._retained[msg["type"]] = msg
+        self._broadcast(msg)
+
+    # ---- read access for analysis ------------------------------------------
+    def candles(self, tf: Timeframe, include_forming: bool = True) -> list[Candle]:
+        out = list(self.stats.history[tf])
+        cur = self._builders[tf].current
+        if include_forming and cur is not None:
+            out.append(replace(cur))
+        return out
+
+    def spread_samples(self) -> list[float]:
+        return list(self.stats.spreads)
+
     # ---- snapshot for new clients ----------------------------------------
     def status_payload(self) -> dict[str, Any]:
         now = self._wall_ms()
@@ -136,6 +169,8 @@ class MarketHub:
             "ticksReceived": self.stats.ticks_received,
             "reconnects": self.stats.reconnects,
             "lastError": self.stats.last_error,
+            "account": getattr(self.source, "account", None),
+            "warnings": list(getattr(self.source, "warnings", []) or []),
             "serverTime": now,
         }
 
@@ -145,13 +180,11 @@ class MarketHub:
         if self.spec:
             msgs.append({"type": "symbol", "data": self.spec.to_wire()})
         for tf in TIMEFRAMES:
-            candles = [c.to_wire(digits) for c in self.stats.history[tf]]
-            cur = self._builders[tf].current
-            if cur is not None:
-                candles.append(cur.to_wire(digits))
+            candles = [c.to_wire(digits) for c in self.candles(tf)[-SNAPSHOT_CANDLES:]]
             msgs.append({"type": "candles", "data": {"tf": tf.value, "candles": candles}})
         if self.stats.last_tick:
             msgs.append({"type": "tick", "data": self.stats.last_tick.to_wire(digits)})
+        msgs.extend(self._retained.values())
         return msgs
 
     # ---- internals -------------------------------------------------------
@@ -160,19 +193,61 @@ class MarketHub:
             self.stats.state = state
             self._broadcast({"type": "status", "data": self.status_payload()})
 
+    def seed_history(self, tf: Timeframe, candles: list[Candle]) -> None:
+        """Load historical bars. The last bar may be the still-forming one."""
+        if not candles:
+            return
+        candles = sorted(candles, key=lambda c: c.open_time_ms)
+        hist = self.stats.history[tf]
+        hist.clear()
+        last = candles[-1]
+        for c in candles[:-1]:
+            hist.append(replace(c, closed=True))
+        if last.closed:
+            hist.append(replace(last))
+        else:
+            self._builders[tf].seed(replace(last))
+        self.version += 1
+        self.closed_version += 1
+
+    def reset_history(self) -> None:
+        for tf in TIMEFRAMES:
+            self.stats.history[tf].clear()
+            self._builders[tf] = CandleBuilder(self.symbol, tf)
+
     def ingest(self, tick: Tick) -> None:
         """Process one tick (public for tests and replay)."""
         digits = self.spec.digits if self.spec else 2
         self.stats.ticks_received += 1
         self.stats.last_tick = tick
         self.stats.last_tick_wall_ms = self._wall_ms()
+        self.stats.spreads.append(tick.spread)
         self._set_state(FeedState.LIVE)
         self._broadcast({"type": "tick", "data": tick.to_wire(digits)})
         for tf, builder in self._builders.items():
             for candle in builder.update(tick):
                 if candle.closed:
                     self.stats.history[tf].append(candle)
+                    self.closed_version += 1
                 self._broadcast({"type": "candle", "data": candle.to_wire(digits)})
+        self.version += 1
+
+    async def _load_history(self) -> None:
+        history = getattr(self.source, "history", None)
+        if history is None:
+            return
+        self.reset_history()
+        for tf in TIMEFRAMES:
+            try:
+                bars = await history(self.symbol, tf, HISTORY_LEN)
+            except Exception:  # noqa: BLE001 - history is best effort
+                log.exception("Could not load %s history", tf.value)
+                continue
+            self.seed_history(tf, bars)
+        digits = self.spec.digits if self.spec else 2
+        for tf in TIMEFRAMES:
+            candles = [c.to_wire(digits) for c in self.candles(tf)[-SNAPSHOT_CANDLES:]]
+            self._broadcast({"type": "candles", "data": {"tf": tf.value, "candles": candles}})
 
     async def _run_feed(self) -> None:
         backoff = self._initial_backoff
@@ -180,7 +255,11 @@ class MarketHub:
             try:
                 self.spec = await self.source.symbol_spec(self.symbol)
                 self._broadcast({"type": "symbol", "data": self.spec.to_wire()})
+                await self._load_history()
+                self._broadcast({"type": "status", "data": self.status_payload()})
                 async for tick in self.source.ticks(self.symbol):
+                    if self.stats.last_error:
+                        self.stats.last_error = None
                     self.ingest(tick)
                     backoff = self._initial_backoff
                 log.warning("Market source ended; restarting")
@@ -188,9 +267,14 @@ class MarketHub:
                 raise
             except Exception as exc:  # noqa: BLE001 - feed must survive any source error
                 log.exception("Market source failed")
-                self.stats.last_error = f"{type(exc).__name__}: {exc}"
+                self.stats.last_error = (
+                    str(exc) if getattr(exc, "user_facing", False) else f"{type(exc).__name__}: {exc}"
+                )
             self.stats.reconnects += 1
+            self.stats.state = FeedState.STARTING  # force a status push below
             self._set_state(FeedState.DISCONNECTED)
+            with contextlib.suppress(Exception):
+                await self.source.close()
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30.0)
 

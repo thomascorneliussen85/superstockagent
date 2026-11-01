@@ -67,7 +67,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
             "data": {
                 "serverVersion": __version__,
                 "protocol": PROTOCOL_VERSION,
-                "mode": settings.mode.value,
+                "mode": hub.mode,
                 "readOnly": True,
                 "symbol": settings.symbol,
             },

@@ -24,17 +24,30 @@ if not defined PY (
 if not defined PY goto :no_python
 echo  Bruker Python: %PY%
 
-rem --- Forste gang, eller hvis en tidligere installasjon feilet: lag nytt miljo ---
-if exist ".venv\installert.ok" goto :run
-if exist ".venv" rmdir /s /q ".venv"
-echo  Forste oppstart: installerer pakker. Dette tar 1-2 minutter...
-echo.
-%PY% -m venv .venv
-if errorlevel 1 goto :venv_failed
-".venv\Scripts\python.exe" -m pip install --upgrade pip
-".venv\Scripts\python.exe" -m pip install -r requirements.txt
-if errorlevel 1 goto :pip_failed
-echo ok> ".venv\installert.ok"
+rem --- Innstillinger: lag .env fra malen forste gang ---
+if not exist ".env" (
+  copy /y ".env.example" ".env" >nul
+  echo  Laget innstillingsfilen .env - standard er MT5-modus, kun lesing.
+)
+
+rem --- Lag Python-miljo forste gang, eller hvis en tidligere installasjon feilet ---
+if not exist ".venv\Scripts\python.exe" (
+  if exist ".venv" rmdir /s /q ".venv"
+  echo  Forste oppstart: lager Python-miljo...
+  %PY% -m venv .venv
+  if errorlevel 1 goto :venv_failed
+)
+
+rem --- Installer pakker hvis requirements.txt er ny eller endret siden sist ---
+fc /b "requirements.txt" ".venv\requirements.installert" >nul 2>&1
+if errorlevel 1 (
+  echo  Installerer/oppdaterer pakker. Dette tar 1-2 minutter...
+  echo.
+  ".venv\Scripts\python.exe" -m pip install --upgrade pip
+  ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+  if errorlevel 1 goto :pip_failed
+  copy /y "requirements.txt" ".venv\requirements.installert" >nul
+)
 
 :run
 echo.
@@ -63,7 +76,7 @@ goto :end
 :pip_failed
 echo  FEIL: Installasjon av pakker feilet. Sjekk internettforbindelsen og prov igjen.
 echo  Ta et skjermbilde av feilmeldingen over hvis det fortsatt feiler.
-if exist ".venv" rmdir /s /q ".venv"
+if exist ".venv\requirements.installert" del ".venv\requirements.installert"
 goto :end
 
 :end

@@ -1,20 +1,13 @@
 import type { TabId } from "../App";
 
-const PLANNED: Record<Exclude<TabId, "market">, { phase: string; title: string; items: string[] }> = {
-  analysis: {
-    phase: "Fase 2–3",
-    title: "Markedsanalyse",
-    items: [
-      "Deterministiske indikatorer: RSI, Supertrend, EMA 9/20/50/200, ATR",
-      "Markedsstruktur, støtte/motstand, likviditetssoner",
-      "Multi-tidsramme (1m, 5m, 15m, 1h)",
-      "AI-forklaring på norsk – kun ved relevante endringer",
-    ],
-  },
+type PlannedId = Exclude<TabId, "market" | "analysis">;
+
+const PLANNED: Record<PlannedId, { phase: string; title: string; items: string[] }> = {
   signals: {
     phase: "Fase 3",
     title: "Mulige oppsett",
     items: [
+      "AI-forklaring på norsk – kun ved relevante endringer",
       "Retning, inngangssone, invalidering, mål og R/R",
       "Støttende og motstridende bevis",
       "Datafriskhet – konfidens vises kun når den er kalibrert historisk",
@@ -40,7 +33,7 @@ const PLANNED: Record<Exclude<TabId, "market">, { phase: string; title: string; 
   },
 };
 
-export function PlannedTab({ tab }: { tab: Exclude<TabId, "market"> }) {
+export function PlannedTab({ tab }: { tab: PlannedId }) {
   const p = PLANNED[tab];
   return (
     <div className="space-y-2">

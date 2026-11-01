@@ -73,6 +73,7 @@ def test_reconnects_after_source_error():
     async def run():
         src = FailingSource()
         hub = MarketHub(src, "XAUUSD", "demo", initial_backoff_seconds=0.01)
+        sub = hub.subscribe(queue_size=100_000)
         await hub.start()
         for _ in range(100):
             await asyncio.sleep(0.005)
@@ -80,7 +81,13 @@ def test_reconnects_after_source_error():
                 break
         await hub.stop()
         assert hub.stats.reconnects >= 1
-        assert "terminal offline" in (hub.stats.last_error or "")
+        errors = []
+        while not sub.queue.empty():
+            m = sub.queue.get_nowait()
+            if m["type"] == "status" and m["data"]["lastError"]:
+                errors.append(m["data"]["lastError"])
+        assert any("terminal offline" in e for e in errors)  # error was reported to clients
         assert hub.stats.ticks_received > 0
+        assert hub.stats.last_error is None  # cleared after recovery
 
     asyncio.run(run())

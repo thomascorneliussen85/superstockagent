@@ -31,6 +31,14 @@ async def get_status(request: Request) -> dict:
     }
 
 
+@router.get("/analysis", dependencies=[Depends(require_token)])
+async def get_analysis(request: Request) -> dict:
+    last = request.app.state.analysis.last
+    if last is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "no analysis yet")
+    return last
+
+
 @router.get("/symbol", dependencies=[Depends(require_token)])
 async def get_symbol(request: Request) -> dict:
     hub = request.app.state.hub

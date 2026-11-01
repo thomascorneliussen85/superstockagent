@@ -63,3 +63,14 @@ def test_ws_unpinned_extension_rejected(client):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws", headers={"origin": "chrome-extension://" + "b" * 32}) as ws:
             ws.receive_json()
+
+
+def test_ws_streams_analysis_and_rest_endpoint(client):
+    with client.websocket_connect("/ws", headers=EXT_ORIGIN) as ws:
+        ws.send_json({"type": "auth", "token": TOKEN})
+        a = recv_until(ws, "analysis", limit=20000)["data"]
+        assert set(a["timeframes"]) == {"1m", "5m", "15m", "1h"}
+        h1 = a["timeframes"]["1h"]
+        assert not h1["insufficient"] and h1["ema"]["200"] is not None  # history backfilled
+    r = client.get("/api/analysis", headers=AUTH)
+    assert r.status_code == 200 and "alignment" in r.json()

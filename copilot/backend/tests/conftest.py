@@ -20,6 +20,7 @@ def settings(tmp_path) -> Settings:
         demo_seed=1,
         heartbeat_seconds=0.5,
         ws_auth_timeout_seconds=1.0,
+        analysis_interval_seconds=0.05,
     )
 
 

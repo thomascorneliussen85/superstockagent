@@ -21,11 +21,13 @@ class TradingMode(StrEnum):
     """Where market/account data comes from.
 
     ``demo`` uses a synthetic price generator and touches no broker at all.
-    ``mt5_demo`` / ``mt5_live`` are reserved for Phase 2+ and are always
-    read-only in the first version.
+    ``mt5`` connects to the logged-in MT5 terminal and reports whether the
+    account is demo or live. ``mt5_demo`` / ``mt5_live`` additionally refuse
+    to run if the account type does not match. All MT5 modes are read-only.
     """
 
     DEMO = "demo"
+    MT5 = "mt5"
     MT5_DEMO = "mt5_demo"
     MT5_LIVE = "mt5_live"
 
@@ -59,6 +61,16 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
 
+    # MetaTrader 5 (read-only).
+    mt5_symbol: str | None = Field(
+        default=None, description="Broker symbol name if not XAUUSD (e.g. XAUUSD.m, GOLD)"
+    )
+    mt5_path: str | None = Field(default=None, description="Path to terminal64.exe (optional)")
+    mt5_utc_offset_minutes: int | None = Field(
+        default=None, description="Broker server time minus UTC. Auto-detected when unset."
+    )
+    mt5_poll_interval_seconds: float = 0.1
+
     # Demo feed parameters.
     demo_start_price: float = 4000.0
     demo_seed: int | None = None
@@ -68,6 +80,7 @@ class Settings(BaseSettings):
     heartbeat_seconds: float = 15.0
     ws_auth_timeout_seconds: float = 5.0
     ws_queue_size: int = 500
+    analysis_interval_seconds: float = 1.0
 
     @field_validator("host")
     @classmethod
@@ -78,8 +91,8 @@ class Settings(BaseSettings):
         return v
 
     @property
-    def is_live(self) -> bool:
-        return self.mode is TradingMode.MT5_LIVE
+    def uses_mt5(self) -> bool:
+        return self.mode is not TradingMode.DEMO
 
 
 @lru_cache

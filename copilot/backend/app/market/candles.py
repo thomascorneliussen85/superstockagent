@@ -27,6 +27,17 @@ class CandleBuilder:
     def current(self) -> Candle | None:
         return self._current
 
+    def seed(self, candle: Candle) -> None:
+        """Start from a historical (possibly still-forming) bar, e.g. from MT5.
+
+        Later ticks in the same bucket extend it; ticks older than the bar's
+        open time are ignored.
+        """
+        if candle.timeframe != self.timeframe:
+            raise ValueError("timeframe mismatch")
+        self._current = candle
+        self._last_time_ms = candle.open_time_ms
+
     def update(self, tick: Tick) -> list[Candle]:
         """Apply one tick. Returns candles to publish, in order.
 
@@ -69,3 +80,28 @@ class CandleBuilder:
         self._current = cur
         out.append(replace(cur))
         return out
+
+
+def aggregate(candles: list[Candle], tf: Timeframe) -> list[Candle]:
+    """Aggregate lower-timeframe candles (sorted, same symbol) into ``tf``.
+
+    The result's last candle is marked open if any of its source candles is open.
+    """
+    out: list[Candle] = []
+    for c in candles:
+        start = bucket_start(c.open_time_ms, tf)
+        if out and out[-1].open_time_ms == start:
+            agg = out[-1]
+            agg.high = max(agg.high, c.high)
+            agg.low = min(agg.low, c.low)
+            agg.close = c.close
+            agg.tick_count += c.tick_count
+            agg.max_spread = max(agg.max_spread, c.max_spread)
+            agg.closed = agg.closed and c.closed
+        else:
+            out.append(replace(c, timeframe=tf, open_time_ms=start))
+    if out:
+        # Every bucket except the newest is complete by construction.
+        for c in out[:-1]:
+            c.closed = True
+    return out

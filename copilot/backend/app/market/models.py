@@ -111,6 +111,13 @@ class SymbolSpec:
     currency_profit: str
     description: str = ""
     source: str = field(default="demo")
+    #: Value of one ``tick_size`` price move for 1.0 lot, in the account currency (MT5).
+    tick_value: float | None = None
+    tick_size: float | None = None
+    #: The broker's own name for the instrument (e.g. "XAUUSD.m", "GOLD").
+    broker_symbol: str | None = None
+    #: Account currency the tick_value is expressed in.
+    currency_account: str | None = None
 
     def to_wire(self) -> dict:
         return {
@@ -124,4 +131,8 @@ class SymbolSpec:
             "currencyProfit": self.currency_profit,
             "description": self.description,
             "source": self.source,
+            "tickValue": self.tick_value,
+            "tickSize": self.tick_size,
+            "brokerSymbol": self.broker_symbol,
+            "currencyAccount": self.currency_account,
         }

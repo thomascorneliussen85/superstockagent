@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { MarketState } from "../../shared/marketState";
-import { TIMEFRAMES, type CandleMsg } from "../../shared/protocol";
+import { TIMEFRAMES, type CandleMsg, type SymbolSpec } from "../../shared/protocol";
 import { MiniChart } from "./MiniChart";
 
 const fmt = (v: number | undefined, d: number) => (v == null ? "–" : v.toFixed(d));
@@ -56,13 +56,30 @@ export function MarketTab({ market }: { market: MarketState }) {
         </table>
       </section>
 
-      {market.symbol && (
-        <section className="text-[11px] text-tv-muted">
-          Kontraktstørrelse: {market.symbol.contractSize} enheter per 1,00 lot · Min. volum {market.symbol.volumeMin} lot
-          {market.symbol.source === "demo" && " (demoverdi – hentes fra MT5 i fase 2)"}
-        </section>
-      )}
+      {market.symbol && <ContractInfo spec={market.symbol} />}
     </div>
+  );
+}
+
+function ContractInfo({ spec }: { spec: SymbolSpec }) {
+  const oz = spec.contractSize;
+  return (
+    <section className="space-y-0.5 text-[11px] text-tv-muted">
+      <h3 className="text-[11px] uppercase tracking-wider">Kontrakt {spec.brokerSymbol ? `(${spec.brokerSymbol})` : ""}</h3>
+      <p>
+        1,00 lot = <span className="text-tv-text">{oz} oz</span> · 0,10 lot = {+(oz * 0.1).toFixed(2)} oz · min {spec.volumeMin} lot, steg{" "}
+        {spec.volumeStep}
+      </p>
+      <p>
+        1 USD prisbevegelse ≈ <span className="text-tv-text">{(oz * 0.1).toFixed(0)} {spec.currencyProfit}</span> per 0,10 lot
+        {spec.tickValue != null && spec.tickSize ? (
+          <>
+            {" "}· tick-verdi {spec.tickValue.toFixed(2)} {spec.currencyAccount ?? spec.currencyProfit} per {spec.tickSize} per lot
+          </>
+        ) : null}
+      </p>
+      {spec.source === "demo" && <p className="text-tv-amber">Demoverdier – start backend i MT5-modus for meglerens ekte spesifikasjon.</p>}
+    </section>
   );
 }
 

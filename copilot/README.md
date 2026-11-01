@@ -2,7 +2,7 @@
 
 A Chrome extension that adds an AI panel to TradingView, plus a local Python backend that reads data from MetaTrader 5. It is built for manual scalping of gold (XAUUSD) on the 1-minute chart.
 
-> **Status: Phase 1 (Foundation) is done.** The extension, panel, local backend, security model and live streaming all work. The data is a **synthetic demo feed** for now. Phase 2 connects it to MT5.
+> **Status: Phase 2 (live market data) is done.** The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
 >
 > The system is **read-only**. It never places, modifies or closes trades. Nothing in it guarantees profit.
 
@@ -16,6 +16,10 @@ copilot/
 ## Quick start (Windows)
 
 ### 1. Backend
+
+**Easiest:** start MetaTrader 5 and log in, then double-click `copilot\backend\start-backend.bat`. On first run it creates a Python environment, installs packages (including `MetaTrader5`) and creates `.env` in **MT5 mode**. Python 3.12–3.14 is required; `MetaTrader5` has no wheels for 3.15 yet.
+
+Manual alternative:
 
 ```powershell
 cd copilot\backend
@@ -60,18 +64,42 @@ This shows the same panel on a mock chart page, connected directly to the backen
 ## Tests
 
 ```bash
-cd copilot/backend && pytest            # 23 tests: candles, auth/origin, WebSocket flow, hub freshness/reconnect
-cd copilot/extension && npm test        # 20 tests: reducer, geometry, WebSocket client (auth/backoff/liveness)
+cd copilot/backend && pytest            # 59 tests: indicators (RSI checked against Wilder's published values),
+                                        # structure/levels/patterns, engine, MT5 source (fake terminal),
+                                        # read-only guard, candles, auth/origin, WebSocket, hub
+cd copilot/extension && npm test        # 26 tests: reducer, Norwegian summaries, geometry, WebSocket client
 cd copilot/extension && npm run build   # type-check + production build
 ```
 
 CI runs all of these in `.github/workflows/copilot-ci.yml`.
 
+## What you see in the panel
+
+- **Marked** shows bid/ask/spread, a 1m mini chart, OHLC per timeframe, and the broker's contract spec: oz per lot, and USD per 1 USD move per 0.10 lot.
+- **Analyse** has three parts:
+  - **Overview:** trend, RSI, EMA stack, Supertrend and volatility per timeframe.
+  - **Summary:** a short Norwegian summary for the selected timeframe, with its EMAs, RSI, ATR, Supertrend, structure, support/resistance (with distance), liquidity and patterns.
+  - **Spread and log:** spread state and cost per lot, and an event log of breakouts, false breakouts and structure breaks on closed candles.
+- **Status line:** connection state, data age, broker server and account currency, and `KUN LESING` (read only). Errors appear as a red line with a plain explanation, such as "MT5 is not running".
+
+### How the trend label is decided (fixed, deterministic rule)
+
+There are four votes, each −1, 0 or +1:
+1. EMA 9 > 20 > 50 (bull), the reverse (bear), or mixed.
+2. Supertrend (10, 3) direction.
+3. Swing structure: higher highs and higher lows, or lower highs and lower lows.
+4. Price above or below EMA 200.
+
+A sum of +2 or more means **Opptrend** (uptrend). −2 or less means **Nedtrend** (downtrend). Anything else is **Sideveis/uklar** (sideways/unclear). This is a description of the current state, not a prediction.
+
 ## Configuration (`copilot/backend/.env`, see `.env.example`)
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `COPILOT_MODE` | `demo` | `demo` = synthetic data. `mt5_demo` and `mt5_live` arrive in Phase 2. |
+| `COPILOT_MODE` | `demo` (`mt5` in `.env.example`) | `demo` = synthetic data · `mt5` = MT5, demo/live detected · `mt5_demo`/`mt5_live` = MT5, refuses to run if the account type differs |
+| `COPILOT_MT5_SYMBOL` | auto | Broker symbol name if not `XAUUSD` (e.g. `XAUUSD.m`, `GOLD`). Auto-detection tries `*XAUUSD*` and `*GOLD*`. |
+| `COPILOT_MT5_UTC_OFFSET_MINUTES` | auto | Broker server time minus UTC. Measured from live ticks and remembered. |
+| `COPILOT_MT5_PATH` | auto | Path to `terminal64.exe` if several terminals are installed |
 | `COPILOT_PORT` | `8765` | Local port |
 | `COPILOT_ALLOWED_EXTENSION_IDS` | `[]` | Pins which extension may connect |
 | `COPILOT_DEMO_SEED` | random | Makes the demo feed reproducible |

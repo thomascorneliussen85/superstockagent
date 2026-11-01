@@ -3,6 +3,7 @@ import type { KVStore } from "../shared/storage";
 import { KEYS } from "../shared/storage";
 import type { PanelTransport } from "../shared/transport";
 import { PanelFrame } from "./components/PanelFrame";
+import { AnalysisTab } from "./components/AnalysisTab";
 import { MarketTab } from "./components/MarketTab";
 import { PlannedTab } from "./components/PlannedTab";
 import { StatusBar } from "./components/StatusBar";
@@ -76,7 +77,13 @@ export function App({ transport, store }: Props) {
           ))}
         </nav>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {tab === "market" ? <MarketTab market={data.market} /> : <PlannedTab tab={tab} />}
+          {tab === "market" ? (
+            <MarketTab market={data.market} />
+          ) : tab === "analysis" ? (
+            <AnalysisTab market={data.market} />
+          ) : (
+            <PlannedTab tab={tab} />
+          )}
         </div>
         <StatusBar data={data} />
       </PanelFrame>

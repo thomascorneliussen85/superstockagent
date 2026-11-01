@@ -18,7 +18,27 @@ export function StatusBar({ data }: { data: { conn: ConnState; connDetail?: stri
     f.level === "fresh" ? "text-tv-up" : f.level === "delayed" ? "text-tv-amber" : f.level === "stale" ? "text-tv-down" : "text-tv-muted";
   const age = f.ageMs == null ? "ingen data" : f.ageMs < 1000 ? `${f.ageMs} ms` : `${(f.ageMs / 1000).toFixed(1)} s`;
 
+  const st = data.market.status;
+  const problem =
+    data.conn === "connected" && st && (st.state === "disconnected" || st.warnings.length > 0)
+      ? st.state === "disconnected"
+        ? st.lastError ?? "Datakilden er frakoblet"
+        : st.warnings[0]
+      : null;
+  const stale = data.conn === "connected" && st?.state === "stale";
+
   return (
+    <>
+      {problem && (
+        <div className={`shrink-0 border-t px-2 py-1 text-[11px] ${st?.state === "disconnected" ? "border-tv-down/40 bg-tv-down/10 text-tv-down" : "border-tv-amber/40 bg-tv-amber/10 text-tv-amber"}`}>
+          {problem}
+        </div>
+      )}
+      {stale && !problem && (
+        <div className="shrink-0 border-t border-tv-amber/40 bg-tv-amber/10 px-2 py-1 text-[11px] text-tv-amber">
+          Ingen nye priser – markedet kan være stengt, eller MT5 har mistet forbindelsen.
+        </div>
+      )}
     <footer className="flex shrink-0 items-center gap-2 border-t border-tv-border bg-tv-panel px-2 py-1 pr-4 text-[11px] text-tv-muted">
       <span title={data.connDetail}>
         {CONN_TEXT[data.conn]}
@@ -27,11 +47,17 @@ export function StatusBar({ data }: { data: { conn: ConnState; connDetail?: stri
       <span className="ml-auto">
         Data: <span className={fCls}>{age}</span>
       </span>
+      {st?.account && (
+        <span title={`${st.account.company} · konto ${st.account.login}`}>
+          {st.account.server} · {st.account.currency}
+        </span>
+      )}
       {data.market.hello?.readOnly && (
         <span className="rounded border border-tv-border px-1" title="Backend kan ikke plassere, endre eller lukke handler">
           KUN LESING
         </span>
       )}
     </footer>
+    </>
   );
 }

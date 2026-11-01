@@ -14,10 +14,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .analysis.service import AnalysisService
 from .api import routes, ws
 from .config import Settings, TradingMode, get_settings
 from .hub import MarketHub
 from .market.demo import DemoMarketSource
+from .market.mt5_source import Mt5MarketSource
 from .market.source import MarketDataSource
 from .security import OriginPolicy, load_or_create_token
 
@@ -27,8 +29,13 @@ log = logging.getLogger("copilot")
 def build_source(settings: Settings) -> MarketDataSource:
     if settings.mode is TradingMode.DEMO:
         return DemoMarketSource(start_price=settings.demo_start_price, seed=settings.demo_seed)
-    raise NotImplementedError(
-        f"mode {settings.mode.value!r} requires the MT5 connector (Phase 2). Use COPILOT_MODE=demo."
+    return Mt5MarketSource(
+        expected_mode=settings.mode.value,
+        broker_symbol=settings.mt5_symbol,
+        terminal_path=settings.mt5_path,
+        utc_offset_minutes=settings.mt5_utc_offset_minutes,
+        data_dir=settings.data_dir,
+        poll_interval=settings.mt5_poll_interval_seconds,
     )
 
 
@@ -46,13 +53,17 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
             stale_after_seconds=settings.stale_after_seconds,
         )
         app.state.hub = hub
+        analysis = AnalysisService(hub, interval=settings.analysis_interval_seconds)
+        app.state.analysis = analysis
         await hub.start()
+        analysis.start()
         log.info(
             "AI Trading Copilot backend %s started (mode=%s, read-only)", __version__, settings.mode.value
         )
         try:
             yield
         finally:
+            await analysis.stop()
             await hub.stop()
 
     app = FastAPI(title="AI Trading Copilot", version=__version__, lifespan=lifespan)
@@ -78,7 +89,7 @@ def main() -> None:
     token = load_or_create_token(settings)
     print("\n  AI Trading Copilot backend")
     print(f"  URL:   http://{settings.host}:{settings.port}")
-    print(f"  Mode:  {settings.mode.value} (read-only)")
+    print(f"  Mode:  {settings.mode.value} (read-only - places no trades)")
     print(f"  Token: {token}")
     print("  Paste the URL and token into the extension's options page.\n")
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")

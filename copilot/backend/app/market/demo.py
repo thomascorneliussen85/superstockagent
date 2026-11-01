@@ -14,7 +14,8 @@ import random
 import time
 from collections.abc import AsyncIterator, Callable
 
-from .models import SymbolSpec, Tick
+from .candles import aggregate, bucket_start
+from .models import Candle, SymbolSpec, Tick, Timeframe
 
 DEMO_SPEC = SymbolSpec(
     symbol="XAUUSD",
@@ -27,7 +28,57 @@ DEMO_SPEC = SymbolSpec(
     currency_profit="USD",
     description="Gold vs US Dollar (SYNTHETIC DEMO FEED)",
     source="demo",
+    tick_value=1.0,  # 0.01 USD move x 100 oz
+    tick_size=0.01,
+    broker_symbol="XAUUSD",
+    currency_account="USD",
 )
+
+
+def generate_demo_history(
+    symbol: str, end_ms: int, minutes: int, end_price: float, seed: int | None
+) -> list[Candle]:
+    """Synthetic 1-minute bars ending with the (open) bar containing ``end_ms``.
+
+    The walk is generated backwards from ``end_price`` so live ticks continue
+    seamlessly from the last close.
+    """
+    rng = random.Random(None if seed is None else seed + 1)
+    last_start = bucket_start(end_ms, Timeframe.M1)
+    closes = [end_price]
+    vol = 0.9
+    drift = 0.0
+    paths: list[list[float]] = []
+    for _ in range(minutes):
+        vol = min(4.0, max(0.25, vol * math.exp(rng.gauss(0, 0.08))))
+        drift = 0.98 * drift + rng.gauss(0, 0.03)
+        # build a path backwards from the close of this minute to its open
+        p = closes[-1]
+        path = [p]
+        for _ in range(6):
+            p -= drift / 6 + rng.gauss(0, vol / 2.45)
+            path.append(p)
+        paths.append(path)
+        closes.append(p)
+    bars: list[Candle] = []
+    for i, path in enumerate(reversed(paths)):
+        start = last_start - (minutes - 1 - i) * Timeframe.M1.ms
+        o, c = round(path[-1], 2), round(path[0], 2)
+        bars.append(
+            Candle(
+                symbol=symbol,
+                timeframe=Timeframe.M1,
+                open_time_ms=start,
+                open=o,
+                high=round(max(path), 2),
+                low=round(min(path), 2),
+                close=c,
+                tick_count=rng.randint(60, 220),
+                max_spread=round(0.15 + abs(rng.gauss(0, 0.08)), 2),
+                closed=i < minutes - 1,
+            )
+        )
+    return bars
 
 
 class DemoTickGenerator:
@@ -79,6 +130,23 @@ class DemoMarketSource:
         self._clock_ms = clock_ms or (lambda: int(time.time() * 1000))
         self._realtime = realtime
         self._closed = False
+        self._history_1m: list[Candle] | None = None
+        self._history_minutes = 0
+
+    def _ensure_history(self, minutes: int) -> list[Candle]:
+        if self._history_1m is None or self._history_minutes < minutes:
+            self._history_1m = generate_demo_history(
+                DEMO_SPEC.symbol, self._clock_ms(), minutes, self._start_price, self._seed
+            )
+            self._history_minutes = minutes
+        return self._history_1m
+
+    async def history(self, symbol: str, tf: Timeframe, count: int) -> list[Candle]:
+        """Synthetic bars so indicators (e.g. EMA 200 on 1h) work immediately."""
+        await self.symbol_spec(symbol)
+        minutes = min(count * tf.ms // Timeframe.M1.ms, 60 * 24 * 30)
+        bars = self._ensure_history(max(minutes, 1))
+        return aggregate(bars, tf)[-count:]
 
     async def symbol_spec(self, symbol: str) -> SymbolSpec:
         if symbol != DEMO_SPEC.symbol:
@@ -87,7 +155,9 @@ class DemoMarketSource:
 
     async def ticks(self, symbol: str) -> AsyncIterator[Tick]:
         spec = await self.symbol_spec(symbol)
-        gen = DemoTickGenerator(spec.symbol, self._start_price, self._clock_ms(), self._seed)
+        self._closed = False
+        start_price = self._history_1m[-1].close if self._history_1m else self._start_price
+        gen = DemoTickGenerator(spec.symbol, start_price, self._clock_ms(), self._seed)
         while not self._closed:
             tick = gen.next_tick()
             if self._realtime:

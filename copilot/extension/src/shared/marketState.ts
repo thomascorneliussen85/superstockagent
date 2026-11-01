@@ -1,6 +1,6 @@
 // Pure reducer holding the latest market view. Used by the background worker
 // (to hydrate newly opened panels) and by the panel itself.
-import type { CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
+import type { Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
 
 export const MAX_CANDLES = 300;
 
@@ -14,6 +14,9 @@ export interface MarketState {
   /** Local receive time of the last tick (browser clock). */
   tickAt: number | null;
   candles: Record<Timeframe, CandleMsg[]>;
+  analysis: Analysis | null;
+  /** Local receive time of the latest analysis. */
+  analysisAt: number | null;
 }
 
 export const emptyMarketState = (): MarketState => ({
@@ -24,6 +27,8 @@ export const emptyMarketState = (): MarketState => ({
   tick: null,
   tickAt: null,
   candles: { "1m": [], "5m": [], "15m": [], "1h": [] },
+  analysis: null,
+  analysisAt: null,
 });
 
 export function upsertCandle(list: CandleMsg[], c: CandleMsg, max = MAX_CANDLES): CandleMsg[] {
@@ -57,6 +62,8 @@ export function reduceMarket(state: MarketState, msg: ServerMessage, now: number
       const tf = msg.data.tf;
       return { ...state, candles: { ...state.candles, [tf]: upsertCandle(state.candles[tf], msg.data) } };
     }
+    case "analysis":
+      return { ...state, analysis: msg.data, analysisAt: now };
     case "candles": {
       const sorted = [...msg.data.candles].sort((a, b) => a.t - b.t).slice(-MAX_CANDLES);
       return { ...state, candles: { ...state.candles, [msg.data.tf]: sorted } };

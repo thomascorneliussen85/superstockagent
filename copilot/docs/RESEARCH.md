@@ -40,7 +40,7 @@ That is a 100× difference. The backend will therefore:
 - calculate risk as `|entry − SL| × contract_size × lots`, using MT5's `trade_tick_value`/`trade_tick_size` and converting to the account currency (for example NOK or USD);
 - round to the broker's `volume_step` and reject anything outside `volume_min`/`volume_max`.
 
-The panel already shows the contract size and marks it as a demo value. Phase 2 replaces it with the value from MT5.
+The panel shows the contract size from MT5 (`trade_contract_size`) and what a 1 USD move is worth per 0.10 lot. In demo mode it is marked as a demo value.
 
 ## 4. Bar Replay vs our own replay
 
@@ -52,5 +52,5 @@ The panel already shows the contract size and marks it as a demo value. Phase 2 
 ## 5. MT5 Python integration
 
 - The `MetaTrader5` package only runs on **Windows**, in the same session as a running terminal that is logged in. That is why the backend runs locally on your PC.
-- The calls are blocking and the package is not thread-safe. The Phase 2 connector will run them in one dedicated worker thread and poll `symbol_info_tick` (MT5 has no push API). Each tick is stamped with MT5's `time_msc`, the server time, and converted to UTC using a measured broker UTC offset.
+- The calls are blocking and the package is not thread-safe. The connector runs them in one dedicated worker thread and polls `copy_ticks_from` every 100 ms (MT5 has no push API). Each tick is stamped with MT5's `time_msc`, the server time, and converted to UTC using a measured broker UTC offset.
 - Read-only means the code base contains no `order_send` until trading is explicitly enabled in a later phase.

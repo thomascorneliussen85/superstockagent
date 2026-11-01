@@ -7,7 +7,7 @@ export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 
 export type FeedState = "starting" | "live" | "stale" | "disconnected";
-export type TradingMode = "demo" | "mt5_demo" | "mt5_live";
+export type TradingMode = "demo" | "mt5" | "mt5_demo" | "mt5_live";
 
 export interface Hello {
   serverVersion: string;
@@ -27,7 +27,18 @@ export interface FeedStatus {
   ticksReceived: number;
   reconnects: number;
   lastError: string | null;
+  account: AccountInfo | null;
+  warnings: string[];
   serverTime: number;
+}
+
+export interface AccountInfo {
+  login: number;
+  server: string;
+  company: string;
+  currency: string;
+  tradeMode: "demo" | "live";
+  leverage: number | null;
 }
 
 export interface SymbolSpec {
@@ -41,6 +52,87 @@ export interface SymbolSpec {
   currencyProfit: string;
   description: string;
   source: string;
+  tickValue: number | null;
+  tickSize: number | null;
+  brokerSymbol: string | null;
+  currencyAccount: string | null;
+}
+
+// ---- Deterministic analysis (backend app/analysis/engine.py) ----
+export type TrendLabel = "up" | "down" | "sideways";
+export type RsiZone = "overbought" | "oversold" | "bullish" | "bearish" | "neutral";
+
+export interface LevelInfo {
+  price: number;
+  touches: number;
+  highs: number;
+  lows: number;
+  lastT: number;
+}
+
+export interface AnalysisEvent {
+  type: "bos_up" | "bos_down" | "breakout_up" | "breakout_down" | "false_breakout_up" | "false_breakout_down";
+  level: number;
+  tf: Timeframe;
+  t: number | null;
+}
+
+export interface TfAnalysis {
+  tf: Timeframe;
+  bars: number;
+  closedBars: number;
+  insufficient: boolean;
+  lastClosedT?: number | null;
+  close?: number;
+  ema?: Record<"9" | "20" | "50" | "200", number | null>;
+  emaStack?: "bull" | "bear" | "mixed" | null;
+  aboveEma200?: boolean | null;
+  rsi?: number | null;
+  rsiPrev?: number | null;
+  rsiZone?: RsiZone | null;
+  atr?: number | null;
+  atrPercentile?: number | null;
+  volatility?: "low" | "normal" | "high" | null;
+  lastRangeAtr?: number | null;
+  supertrend?: { dir: 1 | -1 | null; value: number | null };
+  distEma20Atr?: number | null;
+  structure?: {
+    label: "bullish" | "bearish" | "range" | "unknown";
+    highs: "HH" | "LH" | null;
+    lows: "HL" | "LL" | null;
+    lastHigh: number | null;
+    lastLow: number | null;
+  };
+  trend?: { label: TrendLabel; score: number; votes: Record<"ema" | "supertrend" | "structure" | "ema200", number> };
+  levels?: { support: LevelInfo[]; resistance: LevelInfo[] };
+  liquidity?: { above: LevelInfo[]; below: LevelInfo[] };
+  patterns?: string[];
+  events?: AnalysisEvent[];
+  tickVolumeRatio?: number | null;
+}
+
+export interface SpreadInfo {
+  current: number;
+  points: number;
+  costPerLot: number;
+  currency: string;
+  median?: number;
+  p90?: number;
+  ratio?: number | null;
+  state: "normal" | "elevated" | "high" | null;
+  samples: number;
+}
+
+export interface Analysis {
+  engine: string;
+  computedAt: number;
+  tickTime: number | null;
+  symbol: string;
+  price: { bid: number; ask: number } | null;
+  timeframes: Record<Timeframe, TfAnalysis>;
+  alignment: { up: number; down: number; sideways: number };
+  spread: SpreadInfo | null;
+  recentEvents: AnalysisEvent[];
 }
 
 export interface TickMsg {
@@ -72,13 +164,14 @@ export type ServerMessage =
   | { type: "tick"; data: TickMsg }
   | { type: "candle"; data: CandleMsg }
   | { type: "candles"; data: { tf: Timeframe; candles: CandleMsg[] } }
+  | { type: "analysis"; data: Analysis }
   | { type: "pong"; data: { t: number | null } }
   | { type: "error"; data: { code: string } };
 
 export type ClientMessage = { type: "auth"; token: string } | { type: "ping"; t: number };
 
 const KNOWN = new Set([
-  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "pong", "error",
+  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "pong", "error",
 ]);
 
 /** Parses and minimally validates a server frame. Returns null for unknown/malformed input. */
