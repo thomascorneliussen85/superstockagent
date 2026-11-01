@@ -17,3 +17,4 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "E741"]
 "app/**/store.py" = ["E501"]  # long SQL strings
+"app/coach/*.py" = ["E501"]

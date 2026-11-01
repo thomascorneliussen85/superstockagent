@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     ai_min_interval_seconds: float = 120.0  # minimum gap between automatic AI calls
     ai_allow_demo: bool = False  # don't spend money on synthetic prices by default
     ai_fallbacks: bool = True  # server-side fallback model if Claude declines a request
+    ai_prompt_version: str | None = None  # None = latest; set an older version to roll back
+
+    # --- Coach
+    coach_min_sample: int = 20  # minimum trades per group before a pattern is reported
 
     # --- Your personal risk rules (only used for warnings; nothing is ever enforced on MT5).
     risk_max_per_trade_pct: float = 1.0  # warn when one position risks more than this % of balance

@@ -57,6 +57,23 @@ will work. You are not giving financial advice; the trader decides and executes 
 themselves.\
 """
 
+# Versioned system prompts. Every stored AI comment records the version used, so
+# results can be compared per version and a worse version rolled back with
+# COPILOT_AI_PROMPT_VERSION=<older version>.
+_POSITIONS_START = SYSTEM_PROMPT.index("If `open_positions`")
+_POSITIONS_END = SYSTEM_PROMPT.index("Speak in possibilities")
+PROMPTS: dict[str, str] = {
+    "3.0.0": SYSTEM_PROMPT[:_POSITIONS_START] + SYSTEM_PROMPT[_POSITIONS_END:],
+    "3.1.0": SYSTEM_PROMPT,
+}
+LATEST_PROMPT_VERSION = PROMPT_VERSION
+
+
+def prompt_for(version: str | None) -> tuple[str, str]:
+    v = version if version in PROMPTS else LATEST_PROMPT_VERSION
+    return v, PROMPTS[v]
+
+
 OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {

@@ -123,6 +123,31 @@ class Ledger:
                 self._db.execute("SELECT COUNT(*) FROM ai_calls WHERE ts_ms >= ?", (since_ms,)).fetchone()[0]
             )
 
+    def comments(self, since_ms: int = 0) -> list[dict[str, Any]]:
+        """AI comments with their validated setup (for coach evaluation)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, call_id, ts_ms, bid, ask, response_json, prompt_version FROM ai_comments"
+                " WHERE ts_ms >= ? ORDER BY ts_ms",
+                (since_ms,),
+            ).fetchall()
+        out = []
+        for cid, call_id, ts, bid, ask, resp, pv in rows:
+            r = json.loads(resp)
+            out.append(
+                {
+                    "id": cid,
+                    "callId": call_id,
+                    "ts_ms": ts,
+                    "bid": bid,
+                    "ask": ask,
+                    "setup": r.get("validated_setup"),
+                    "bias": r.get("bias"),
+                    "promptVersion": pv,
+                }
+            )
+        return out
+
     def close(self) -> None:
         with self._lock:
             self._db.close()

@@ -10,7 +10,7 @@ from typing import Any
 import anthropic
 
 from .pricing import cost_usd
-from .prompt import OUTPUT_SCHEMA, SYSTEM_PROMPT
+from .prompt import OUTPUT_SCHEMA, prompt_for
 
 log = logging.getLogger(__name__)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -45,7 +45,9 @@ class ClaudeCommentator:
         max_tokens: int = 2500,
         fallbacks: bool = True,
         client: Any | None = None,
+        prompt_version: str | None = None,
     ) -> None:
+        self.prompt_version, self.system_prompt = prompt_for(prompt_version)
         self.model = model
         self.effort = effort
         self.max_tokens = max_tokens
@@ -56,7 +58,7 @@ class ClaudeCommentator:
         return {
             "model": self.model,
             "max_tokens": self.max_tokens,
-            "system": SYSTEM_PROMPT,
+            "system": self.system_prompt,
             "messages": [
                 {
                     "role": "user",
@@ -71,7 +73,23 @@ class ClaudeCommentator:
         }
 
     async def comment(self, snapshot: dict[str, Any]) -> LlmResult:
-        kwargs = self.request_kwargs(snapshot)
+        return await self._run(self.request_kwargs(snapshot))
+
+    async def complete_json(
+        self, system: str, user: str, schema: dict[str, Any], max_tokens: int | None = None
+    ) -> LlmResult:
+        """Generic structured call (used for coach reviews)."""
+        return await self._run(
+            {
+                "model": self.model,
+                "max_tokens": max_tokens or self.max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+                "output_config": {"effort": self.effort, "format": {"type": "json_schema", "schema": schema}},
+            }
+        )
+
+    async def _run(self, kwargs: dict[str, Any]) -> LlmResult:
         try:
             if self.fallbacks:
                 resp = await self.client.beta.messages.create(

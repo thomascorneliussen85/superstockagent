@@ -248,6 +248,35 @@ class AIService:
         self.hub.publish({"type": "ai", "data": msg}, retain=True)
         self.publish_status()
 
+    async def generate_text(
+        self, system: str, user: str, schema: dict[str, Any], trigger: str, max_tokens: int = 3000
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Budget-checked structured call for other features (e.g. coach reviews)."""
+        if self.commentator is None:
+            return None, self.disabled_reason or "AI er ikke tilgjengelig."
+        worst = worst_case_cost_usd(self.commentator.model, 6000, max_tokens)
+        blocked = self.budget.check(self._now(), worst)
+        if blocked:
+            return None, blocked
+        res = await self.commentator.complete_json(system, user, schema, max_tokens)
+        self.ledger.record_call(
+            ts_ms=int(time.time() * 1000),
+            model=res.model,
+            served_model=res.served_model,
+            trigger=trigger,
+            input_tokens=res.input_tokens,
+            output_tokens=res.output_tokens,
+            cache_read_tokens=res.cache_read_tokens,
+            cache_write_tokens=res.cache_write_tokens,
+            cost_usd=res.cost_usd,
+            ok=int(res.ok),
+            error=res.error,
+            stop_reason=res.stop_reason,
+            request_id=res.request_id,
+        )
+        self.publish_status()
+        return (res.data, None) if res.ok else (None, res.error)
+
     async def run(self) -> None:
         self.publish_status()
         last_status = 0.0

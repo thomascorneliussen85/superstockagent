@@ -21,8 +21,11 @@ from .ai.ledger import Ledger
 from .ai.llm import ClaudeCommentator
 from .ai.service import AIService
 from .analysis.service import AnalysisService
+from .api import coach as coach_api
 from .api import journal as journal_api
 from .api import routes, ws
+from .coach.service import CoachService
+from .coach.store import CoachStore
 from .config import Settings, TradingMode, get_settings
 from .hub import MarketHub
 from .journal.service import JournalService
@@ -64,6 +67,7 @@ def build_ai(settings: Settings, hub: MarketHub, analysis: AnalysisService) -> A
             settings.ai_effort,
             settings.ai_max_tokens,
             settings.ai_fallbacks,
+            prompt_version=settings.ai_prompt_version,
         )
     return AIService(
         hub,
@@ -106,18 +110,31 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         )
         app.state.journal = journal
         app.state.account = AccountMonitor(hub, analysis, rules, journal=journal)
+        coach = CoachService(
+            journal,
+            CoachStore(journal.store),
+            app.state.ai,
+            app.state.account,
+            analysis,
+            settings.risk_max_per_trade_pct,
+            settings.coach_min_sample,
+        )
+        coach.record_versions(settings)
+        app.state.coach = coach
         app.state.ai.account = app.state.account
         await hub.start()
         analysis.start()
         app.state.ai.start()
         app.state.account.start()
         journal.start()
+        coach.start()
         log.info(
             "AI Trading Copilot backend %s started (mode=%s, read-only)", __version__, settings.mode.value
         )
         try:
             yield
         finally:
+            await coach.stop()
             await journal.stop()
             journal.store.close()
             await app.state.account.stop()
@@ -138,6 +155,7 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
     )
     app.include_router(routes.router)
     app.include_router(journal_api.router)
+    app.include_router(coach_api.router)
     app.include_router(ws.router)
     return app
 
