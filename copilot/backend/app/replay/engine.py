@@ -139,7 +139,13 @@ class ReplaySession:
     # ---- release ------------------------------------------------------------------------
     def _capture(self, msg: dict[str, Any]) -> None:
         t = msg["type"]
-        key = f"{t}:{msg['data'].get('tf', '')}" if t in ("candle", "candles") else t
+        # Keep the final state of a candle that just closed as well as the new one.
+        if t == "candle":
+            key = f"candle:{msg['data']['tf']}:{msg['data']['t']}"
+        elif t == "candles":
+            key = f"candles:{msg['data']['tf']}"
+        else:
+            key = t
         self._buffer[key] = msg
 
     def _flush(self) -> None:

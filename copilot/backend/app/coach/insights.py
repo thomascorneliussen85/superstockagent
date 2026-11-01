@@ -26,6 +26,10 @@ def _fmt(v: float, unit: str) -> str:
     return f"{s} R" if unit == "R" else f"{s}"
 
 
+def _n(v: float, d: int = 1) -> str:
+    return f"{v:.{d}f}".replace(".", ",")
+
+
 def _unit(trades: list[dict[str, Any]]) -> str:
     with_r = sum(1 for t in trades if t.get("r_multiple") is not None)
     return "R" if trades and with_r >= 0.8 * len(trades) else "money"
@@ -244,8 +248,8 @@ def habit_insights(trades: list[dict[str, Any]], min_n: int) -> list[dict[str, A
                     "id": "habit:hold-losers",
                     "kind": "habit",
                     "title": "Du holder tapende handler lenger enn vinnende.",
-                    "detail": f"Snitt {statistics.fmean(losses):.1f} min for tapere mot {statistics.fmean(wins):.1f} min "
-                    f"for vinnere ({ratio:.1f}×).".replace(".", ","),
+                    "detail": f"Snitt {_n(statistics.fmean(losses))} min for tapere mot {_n(statistics.fmean(wins))} min "
+                f"for vinnere ({_n(ratio)}×).",
                     "n": len(wins) + len(losses),
                     "ci": [round(ci[0], 2), round(ci[1], 2)],
                     "strength": "solid" if min(len(wins), len(losses)) >= SOLID_N else "foreløpig",

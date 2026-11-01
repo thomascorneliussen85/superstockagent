@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "AI Trading Copilot",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "description": "AI-assisted market analysis, trade monitoring and coaching panel for TradingView. Read-only: never places trades.",
   "minimum_chrome_version": "116",
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "action": { "default_title": "AI Trading Copilot", "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" } },
   "background": { "service_worker": "background.js", "type": "module" },
-  "options_page": "options.html",
+  "options_page": "options/options.html",
   "permissions": ["storage"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
   "content_scripts": [

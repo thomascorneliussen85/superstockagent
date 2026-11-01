@@ -1,6 +1,6 @@
 // Pure reducer holding the latest market view. Used by the background worker
 // (to hydrate newly opened panels) and by the panel itself.
-import type { AccountView, AiComment, AiStatus, Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
+import type { AccountView, CoachPanel, TradeFeedback, AiComment, AiStatus, Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
 
 export const MAX_CANDLES = 300;
 
@@ -20,6 +20,8 @@ export interface MarketState {
   ai: AiComment | null;
   aiStatus: AiStatus | null;
   account: AccountView | null;
+  coach: CoachPanel | null;
+  feedback: TradeFeedback | null;
 }
 
 export const emptyMarketState = (): MarketState => ({
@@ -35,6 +37,8 @@ export const emptyMarketState = (): MarketState => ({
   ai: null,
   aiStatus: null,
   account: null,
+  coach: null,
+  feedback: null,
 });
 
 export function upsertCandle(list: CandleMsg[], c: CandleMsg, max = MAX_CANDLES): CandleMsg[] {
@@ -76,6 +80,10 @@ export function reduceMarket(state: MarketState, msg: ServerMessage, now: number
       return { ...state, aiStatus: msg.data };
     case "account":
       return { ...state, account: msg.data };
+    case "coach":
+      return { ...state, coach: msg.data };
+    case "trade_feedback":
+      return { ...state, feedback: msg.data };
     case "candles": {
       const sorted = [...msg.data.candles].sort((a, b) => a.t - b.t).slice(-MAX_CANDLES);
       return { ...state, candles: { ...state.candles, [msg.data.tf]: sorted } };

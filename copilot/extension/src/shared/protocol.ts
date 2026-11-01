@@ -247,6 +247,70 @@ export interface AccountView {
   alerts?: RiskAlert[];
 }
 
+// ---- Coach (backend app/coach) ----
+export interface Insight {
+  id: string;
+  kind: "strength" | "weakness" | "habit";
+  title: string;
+  detail: string;
+  strength: "solid" | "foreløpig";
+  diff?: number;
+  ci?: [number, number];
+  unit?: "R" | "money";
+}
+
+export interface TradeFeedback {
+  position_id: number;
+  direction: "long" | "short";
+  closeMs: number;
+  net: number;
+  r: number | null;
+  headline: string;
+  points: { tone: "good" | "bad" | "warn" | "neutral"; text: string }[];
+}
+
+export interface SimilarResult {
+  n: number;
+  reason?: string;
+  winRate?: number;
+  winRateCi?: [number, number] | null;
+  meanOutcome?: number;
+  meanCi?: [number, number] | null;
+  unit?: "R" | "money";
+  enough?: boolean;
+}
+
+export interface CoachPanel {
+  minSample: number;
+  trades: number;
+  insights: Insight[];
+  drift: { group: string; status: string; recentMean: number; beforeMean: number; ci: [number, number] }[];
+  recommended: { id: string; title: string; oosGain: number | null; oosCi: [number, number] | null }[];
+  lastFeedback: TradeFeedback | null;
+  similar: { long?: SimilarResult; short?: SimilarResult };
+  reviews: { id: number; period: string; label: string }[];
+}
+
+export interface ReplayState {
+  active: boolean;
+  error?: string;
+  startMs?: number;
+  clockMs?: number;
+  speed?: number;
+  paused?: boolean;
+  ended?: boolean;
+  dataQuality?: "ticks" | "bars" | "synthetic";
+  account?: {
+    balance: number;
+    equity: number;
+    commissionPerLot: number;
+    contractSize: number;
+    positions: { id: number; side: "buy" | "sell"; volume: number; entry: number; sl: number | null; tp: number | null; open_ms: number; profit: number; risk_money: number | null }[];
+    trades: { id: number; side: "buy" | "sell"; volume: number; entry: number; exit: number; open_ms: number; close_ms: number; net: number; r_multiple: number | null; exit_reason: string; mfe: number; mae: number }[];
+  };
+  events?: { type: string; fromMs?: number; toMs?: number }[];
+}
+
 export interface TickMsg {
   symbol: string;
   t: number;
@@ -279,14 +343,26 @@ export type ServerMessage =
   | { type: "analysis"; data: Analysis }
   | { type: "ai"; data: AiComment }
   | { type: "account"; data: AccountView }
+  | { type: "coach"; data: CoachPanel }
+  | { type: "trade_feedback"; data: TradeFeedback }
+  | { type: "replay"; data: ServerMessage }
+  | { type: "replay_state"; data: ReplayState }
   | { type: "ai_status"; data: AiStatus }
   | { type: "pong"; data: { t: number | null } }
   | { type: "error"; data: { code: string } };
 
-export type ClientMessage = { type: "auth"; token: string } | { type: "ping"; t: number } | { type: "ai_request" };
+export type ClientMessage =
+  | { type: "auth"; token: string }
+  | { type: "ping"; t: number }
+  | { type: "ai_request" }
+  | { type: "replay_start"; startMs: number; speed?: number; balance?: number; commissionPerLot?: number }
+  | { type: "replay_control"; action: "pause" | "resume" | "speed" | "jump" | "stop"; value?: number }
+  | { type: "replay_order"; side: "buy" | "sell"; volume: number; slDistance: number | null; tpDistance: number | null }
+  | { type: "replay_close"; id: number | "all" }
+  | { type: "replay_ai" };
 
 const KNOWN = new Set([
-  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "ai", "ai_status", "account", "pong", "error",
+  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "ai", "ai_status", "account", "coach", "trade_feedback", "replay", "replay_state", "pong", "error",
 ]);
 
 /** Parses and minimally validates a server frame. Returns null for unknown/malformed input. */

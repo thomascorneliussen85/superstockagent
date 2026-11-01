@@ -36,6 +36,9 @@ function createPortTransport(): PanelTransport {
     openOptions() {
       void chrome.runtime.sendMessage({ kind: "open-options" });
     },
+    openPage(page) {
+      void chrome.runtime.sendMessage({ kind: "open-page", page });
+    },
     send(msg) {
       try {
         current?.postMessage({ kind: "client", msg } satisfies PortRequest);

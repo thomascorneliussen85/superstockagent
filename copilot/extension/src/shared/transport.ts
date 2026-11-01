@@ -1,7 +1,7 @@
 // How the panel receives data. In the extension this is a chrome.runtime Port
 // to the background worker; in the dev harness it is a direct BackendClient.
 import { emptyMarketState, reduceMarket, type MarketState } from "./marketState";
-import type { ClientMessage, ConnState, ServerMessage } from "./protocol";
+import type { ConnState, ServerMessage } from "./protocol";
 
 export type PanelEvent =
   | { kind: "snapshot"; conn: ConnState; detail?: string; market: MarketState }
@@ -9,13 +9,15 @@ export type PanelEvent =
   | { kind: "msg"; msg: ServerMessage }
   | { kind: "toggle" };
 
-export type PanelRequest = Exclude<ClientMessage, { type: "auth" } | { type: "ping" }>;
+export type PanelRequest = { type: "ai_request" };
 
 export interface PanelTransport {
   subscribe(cb: (ev: PanelEvent) => void): () => void;
   openOptions(): void;
   /** Forward a request (e.g. "ask AI now") to the backend. */
   send(msg: PanelRequest): void;
+  /** Open one of the extension's full pages in a new tab. */
+  openPage(page: "journal" | "replay"): void;
 }
 
 /** Messages from a panel to the background worker over the Port. */

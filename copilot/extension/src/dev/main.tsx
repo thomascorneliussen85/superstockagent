@@ -20,6 +20,9 @@ const client = new BackendClient({
 
 const transport: PanelTransport = {
   subscribe: (cb) => relay.subscribe(cb),
+  openPage(page) {
+    window.open(`/${page}.html`, "_blank");
+  },
   send(msg) {
     client.request(msg);
   },

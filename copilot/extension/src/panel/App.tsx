@@ -6,7 +6,7 @@ import type { PanelTransport } from "../shared/transport";
 import { PanelFrame } from "./components/PanelFrame";
 import { AnalysisTab } from "./components/AnalysisTab";
 import { MarketTab } from "./components/MarketTab";
-import { PlannedTab } from "./components/PlannedTab";
+import { CoachTab } from "./components/CoachTab";
 import { PositionsTab } from "./components/PositionsTab";
 import { SignalsTab } from "./components/SignalsTab";
 import { StatusBar } from "./components/StatusBar";
@@ -112,7 +112,7 @@ export function App({ transport, store }: Props) {
           ) : tab === "positions" ? (
             <PositionsTab market={data.market} />
           ) : (
-            <PlannedTab tab={tab} />
+            <CoachTab market={data.market} onOpen={(p) => transport.openPage(p)} />
           )}
         </div>
         <StatusBar data={data} />
