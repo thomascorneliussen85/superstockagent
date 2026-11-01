@@ -2,7 +2,15 @@
 
 A Chrome extension that adds an AI panel to TradingView, plus a local Python backend that reads data from MetaTrader 5. It is built for manual scalping of gold (XAUUSD) on the 1-minute chart.
 
-> **Status: Phase 4 (trade monitoring) is done.** The **Posisjoner** tab reads your MT5 account and open positions (read-only). It shows risk to stop-loss in money and % of balance, computed from the broker's contract spec, plus today's result against your daily loss limit. It warns about missing SL, oversized risk, price approaching SL, correlated positions, high spread while in a trade and low margin, with optional voice alerts. Phase 3: Claude writes short Norwegian comments and possible setups when something meaningful happens in the market, within a hard monthly budget; optional Norwegian voice alerts. Phase 2: The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
+> **Status: all eight phases are implemented.**
+> 1. Panel in TradingView.
+> 2. Live MT5 data and deterministic analysis.
+> 3. Claude commentary with a hard budget, plus voice alerts.
+> 4. Read-only position and risk monitoring.
+> 5. Trading journal with analytics.
+> 6. Personal coach and learning system.
+> 7. Tick-by-tick replay simulator with simulated orders and hotkeys.
+> 8. Simulations, stability and performance tests.
 >
 > The system is **read-only**. It never places, modifies or closes trades. Nothing in it guarantees profit.
 
@@ -13,7 +21,18 @@ copilot/
   docs/        Architecture, research findings, roadmap
 ```
 
-## Quick start (Windows)
+## Install and update (Windows, recommended)
+
+1. Download `copilot/installer.bat` and double-click it. It needs Git for Windows; GitHub Desktop's built-in git is used if found. The installer does four things:
+   - clones this repository to `%USERPROFILE%\AITradingCopilot`
+   - copies `.env` and `data/` (API key, token, journal) from an old zip installation
+   - creates the desktop shortcuts **AI Copilot - start** and **AI Copilot - oppdater** (update)
+   - shows the one-time Chrome step: *Load unpacked* → `AITradingCopilot\copilot\extension\dist`
+2. **To update later**, double-click **AI Copilot - oppdater**. It runs `git fetch` and a hard reset to the branch; files ignored by git are never touched. Then restart the backend and press ↻ on the extension.
+
+The built extension (`copilot/extension/dist`) is committed, so updating needs no Node.js on the PC. Rebuild with `npm run build` before committing extension changes.
+
+## Quick start (Windows, manual)
 
 ### 1. Backend
 
@@ -64,12 +83,10 @@ This shows the same panel on a mock chart page, connected directly to the backen
 ## Tests
 
 ```bash
-cd copilot/backend && pytest            # 87 tests: account risk (contract-spec risk, alerts, daily limit,
-                                        # read-only MT5 allow-list),  AI (budget, triggers, setup validation, real-SDK request
-                                        # with mocked HTTP, service end-to-end), plus: indicators (RSI checked against Wilder's published values),
-                                        # structure/levels/patterns, engine, MT5 source (fake terminal),
-                                        # read-only guard, candles, auth/origin, WebSocket, hub
-cd copilot/extension && npm test        # 34 tests: reducer, Norwegian summaries, voice alerts, geometry, WebSocket client
+cd copilot/backend && pytest            # 112 tests (indicators vs. Wilder reference, MT5 via fake terminal,
+                                        # read-only guards, AI budget/validation, risk, journal, coach statistics,
+                                        # replay look-ahead, simulations, stability and performance)
+cd copilot/extension && npm test        # 37 tests: reducer, Norwegian summaries, voice alerts, hotkeys, geometry, WebSocket client
 cd copilot/extension && npm run build   # type-check + production build
 ```
 
@@ -128,6 +145,61 @@ A sum of +2 or more means **Opptrend** (uptrend). −2 or less means **Nedtrend*
   - `COPILOT_RISK_NEAR_SL_FRACTION` (default 25 % of the SL distance left)
 - **Daily result.** Today's closed trades (profit + commission + swap) plus floating P/L, with the day starting at midnight Oslo time.
 - **AI context.** Claude is told about your open gold positions, but is instructed never to tell you to close, add or move anything.
+
+## Journal & coach (Phases 5-6)
+
+The page opens from the panel's **Coach** tab via **Journal og coach**.
+
+- **Journal data.**
+  - MT5 deals are imported into `deals_raw`. It is insert-only, keyed by deal ticket, so there are no duplicates.
+  - Round-trip trades are rebuilt deterministically from those deals. The initial SL/TP comes from the entry order, or from the first live sighting.
+  - Entry context is the live analysis, or is rebuilt from bars that had already closed before entry (no look-ahead).
+  - Notes, setup tags, tags and screenshots are stored separately, and so are generated evaluations.
+- **Statistics.**
+  - P/L, win rate with a Wilson interval, profit factor, average win/loss, R, and expectancy with a bootstrap CI.
+  - Max drawdown, streaks and costs.
+  - Breakdowns by hour, weekday, session, setup and direction.
+  - Equity, drawdown, daily and distribution charts.
+- **Coach.**
+  - **Patterns.** A pattern is only claimed when both groups have at least `COPILOT_COACH_MIN_SAMPLE` trades (default 20) and the 95 % bootstrap CI of the difference excludes 0. It is labelled "foreløpig" (preliminary) below 50 trades.
+  - **After every trade.** Feedback, and a link to the AI suggestion that was active when the trade was opened. Following a suggestion is never treated as the cause of the result.
+  - **Reviews.** Daily and weekly reviews with an optional AI narrative.
+  - **Similar situations.** kNN on entry context.
+  - **AI accuracy.** Each AI suggestion is evaluated against the M1 bars that followed it.
+  - **Validation.** Candidate rules must pass walk-forward testing, and setups that have stopped working are flagged.
+  - **Memory and versions.** A knowledge base with history, and a version registry (prompt rollback via `COPILOT_AI_PROMPT_VERSION`).
+- **Not model training.** "Learning" here means persistent data plus statistics. The language model is never retrained, and nothing here can change risk limits or trade.
+
+## Replay simulator (Phase 7)
+
+The page opens from the panel's **Coach** tab via **Replay-trening**.
+
+- **Data.** Real historical bid/ask ticks from MT5 (`copy_ticks_range`) are played back on a virtual clock: 1–60×, pause, jumps. They are fed through the same candle builder and analysis as live, so 1m candles form second by second.
+- **Gaps and fallbacks.** Weekends are skipped. When the broker has no tick history that far back, M1 bars are used, and the movement inside each bar is labelled as synthetic.
+- **No look-ahead.** Future ticks are held privately and released only as the clock passes them. Analysis, AI questions and fills only see released data (tested).
+- **Simulated orders.**
+  - BUY fills at the ask, SELL at the bid.
+  - SL is a stop filled at market, TP is a limit, and commission is charged per lot.
+  - The ticket shows lots → oz and risk in money.
+  - Hotkeys are configurable: B, S, X, Space, →, Shift+→, + and −.
+  - There is a session summary, plus MFE/MAE per trade.
+- **TradingView's own Bar Replay** cannot be controlled or read by an extension, so this is a separate chart.
+
+## Testing & performance (Phase 8)
+
+`pytest` includes:
+- a 6-hour strategy simulation that checks the simulated broker's accounting and fill rules
+- a long-running test (150k ticks) that checks memory stays bounded
+- performance budgets
+
+`python scripts/benchmark.py` prints the timings. Typical numbers:
+
+| Measure | Result |
+|---|---|
+| Analysis (4 timeframes × 500 bars) | ≈ 6 ms |
+| Tick ingest | > 100k ticks/s |
+| Replay of 1 market hour | ≈ 0.25 s |
+| Coach patterns over 1,000 trades | ≈ 4 s (background thread, every 15 min) |
 
 ## Configuration (`copilot/backend/.env`, see `.env.example`)
 

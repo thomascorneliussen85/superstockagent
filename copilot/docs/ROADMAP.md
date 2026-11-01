@@ -6,10 +6,10 @@
 | 2. Live market data | `Mt5MarketSource` (dedicated thread, `copy_ticks_from` polling with dedupe, broker→UTC offset), real contract spec, history backfill, demo/live account verification, indicators (RSI, Supertrend, EMA 9/20/50/200, ATR) matching TradingView definitions, market structure, S/R, liquidity, breakouts/false breakouts, patterns, spread statistics, Analyse tab | ✅ Done |
 | 3. AI | Event detector (new closed candle, structure break, level touch, spread spike) → compact JSON state → LLM (Claude/OpenAI, configurable) → Norwegian commentary. Rate-limited, with cost tracking per call. Signal objects with entry, invalidation, target, R/R and supporting/conflicting evidence. Voice alerts (Web Speech API, nb-NO) with cooldown and deduplication. | ✅ Done |
 | 4. Trade monitoring | Read-only `positions_get`, `account_info`. Risk % per position and in total, distance to SL, correlated exposure, daily risk limit, spread alerts. | ✅ Done |
-| 5. Journal (next) | `history_deals_get` → round-trip trades (idempotent on deal ticket), SQLite (SQLAlchemy, ready for Postgres), raw data kept separate from AI evaluations, analytics dashboard (equity curve, drawdown, by hour/weekday/session/setup). | |
-| 6. Coach | Market context captured at entry, statistical tests with minimum sample sizes and confidence intervals (bootstrap / Wilson), daily and weekly reviews. | |
-| 7. Replay | Tick replay with a virtual clock, look-ahead protection enforced on the backend, Lightweight Charts, simulated orders and hotkeys, realistic spread and commission. | |
-| 8. Test & optimisation | Load testing, long-running stability, walk-forward evaluation of strategies, signal calibration (reliability diagrams, Brier score). | |
+| 5. Journal | `history_deals_get` → round-trip trades (idempotent on deal ticket), SQLite (SQLAlchemy, ready for Postgres), raw data kept separate from AI evaluations, analytics dashboard (equity curve, drawdown, by hour/weekday/session/setup). | ✅ Done |
+| 6. Coach | Market context captured at entry, statistical tests with minimum sample sizes and confidence intervals (bootstrap / Wilson), daily and weekly reviews. | ✅ Done |
+| 7. Replay | Tick replay with a virtual clock, look-ahead protection enforced on the backend, Lightweight Charts, simulated orders and hotkeys, realistic spread and commission. | ✅ Done |
+| 8. Test & optimisation | Load testing, long-running stability, walk-forward evaluation of strategies, signal calibration (reliability diagrams, Brier score). | ✅ Done (simulation, stability, performance tests; AI hit-rate tracking - probability calibration needs stated probabilities, which the AI deliberately does not give) |
 
 ## Learning system (across Phases 5–8)
 
