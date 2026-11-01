@@ -338,6 +338,10 @@ class Mt5MarketSource:
         seen_at_last = 1 if last is not None else 0
         prev_bid = float(last.bid) if last is not None and last.bid else None
         prev_ask = float(last.ask) if last is not None and last.ask else None
+        if prev_bid and prev_ask and prev_ask >= prev_bid:
+            # Emit the last known price immediately, even when the market is closed,
+            # so the panel shows something; the hub marks it stale by its timestamp.
+            yield Tick(canonical, self._to_utc(last_msc), prev_bid, prev_ask, 1.0)
         last_health = time.monotonic()
         while not self._closed:
             batch = await self._call(self._poll_sync, last_msc)

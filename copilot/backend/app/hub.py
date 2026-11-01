@@ -35,6 +35,7 @@ TIMEFRAMES = (Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1)
 HISTORY_LEN = 500  # closed candles kept per timeframe (EMA 200 needs >= 200)
 SNAPSHOT_CANDLES = 120  # candles per timeframe sent to a newly connected client
 SPREAD_WINDOW = 3000  # recent ticks used for spread statistics
+OLD_TICK_MS = 10_000  # ticks older than this on arrival are treated as stale
 
 
 class FeedState:
@@ -220,9 +221,13 @@ class MarketHub:
         digits = self.spec.digits if self.spec else 2
         self.stats.ticks_received += 1
         self.stats.last_tick = tick
-        self.stats.last_tick_wall_ms = self._wall_ms()
+        now = self._wall_ms()
+        # A tick much older than "now" (e.g. last price before the weekend) must not
+        # look fresh. Small clock differences (< 10 s) are ignored.
+        old = now - tick.time_ms > OLD_TICK_MS
+        self.stats.last_tick_wall_ms = tick.time_ms if old else now
         self.stats.spreads.append(tick.spread)
-        self._set_state(FeedState.LIVE)
+        self._set_state(FeedState.STALE if old else FeedState.LIVE)
         self._broadcast({"type": "tick", "data": tick.to_wire(digits)})
         for tf, builder in self._builders.items():
             for candle in builder.update(tick):

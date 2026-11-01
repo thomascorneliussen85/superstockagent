@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { MarketState } from "../../shared/marketState";
 import { TIMEFRAMES, type CandleMsg, type SymbolSpec } from "../../shared/protocol";
+import { AccountCard } from "./AccountCard";
 import { MiniChart } from "./MiniChart";
 
 const fmt = (v: number | undefined, d: number) => (v == null ? "–" : v.toFixed(d));
@@ -14,11 +15,18 @@ export function MarketTab({ market }: { market: MarketState }) {
   const priceCls = dir > 0 ? "text-tv-up" : dir < 0 ? "text-tv-down" : "text-tv-text";
 
   if (!t) {
-    return <p className="text-xs text-tv-muted">Venter på markedsdata…</p>;
+    return (
+      <div className="space-y-3">
+        <AccountCard market={market} />
+        <p className="text-xs text-tv-muted">Venter på markedsdata…</p>
+        {market.symbol && <ContractInfo spec={market.symbol} />}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-3">
+      <AccountCard market={market} />
       {market.status?.synthetic && (
         <div className="rounded border border-tv-amber/40 bg-tv-amber/10 px-2 py-1.5 text-[11px] text-tv-amber">
           Syntetiske demodata. Prisene er ikke ekte og skal ikke brukes til handel.

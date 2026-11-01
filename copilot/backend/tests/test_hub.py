@@ -91,3 +91,13 @@ def test_reconnects_after_source_error():
         assert hub.stats.last_error is None  # cleared after recovery
 
     asyncio.run(run())
+
+
+def test_old_tick_is_stale_immediately():
+    clock = FakeClock()
+    hub = make_hub(clock)
+    hub.ingest(Tick("XAUUSD", clock.now - 2 * 86_400_000, 10.0, 10.2))  # Friday's last price
+    assert hub.stats.state == FeedState.STALE
+    assert hub.status_payload()["lastTickAgeMs"] >= 2 * 86_400_000
+    hub.ingest(Tick("XAUUSD", clock.now - 500, 10.0, 10.2))  # live again
+    assert hub.stats.state == FeedState.LIVE

@@ -33,7 +33,18 @@ export function OptionsPage() {
       if (r.status === 401) return setTest({ ok: false, text: "Backend svarer, men tokenet er feil." });
       if (!r.ok) return setTest({ ok: false, text: `Backend svarte ${r.status}.` });
       const s = await r.json();
-      setTest({ ok: true, text: `OK – versjon ${s.version}, modus ${s.feed.mode}, feed ${s.feed.state}, kun lesing: ${s.readOnly ? "ja" : "nei"}` });
+      const f = s.feed;
+      if (f.synthetic) {
+        setTest({ ok: true, text: "OK – backend kjører, men i DEMO-modus med syntetiske priser (COPILOT_MODE=demo i .env)." });
+      } else if (f.account) {
+        const a = f.account;
+        setTest({
+          ok: true,
+          text: `OK – koblet til ${a.company || a.server} (server ${a.server}, konto ${a.login}, ${a.currency}, ${a.tradeMode === "live" ? "LIVE-konto" : "demokonto"}). Kun lesing.`,
+        });
+      } else {
+        setTest({ ok: false, text: `Backend kjører, men er ikke koblet til MT5: ${f.lastError ?? "venter på MetaTrader 5 …"}` });
+      }
     } catch {
       setTest({ ok: false, text: "Får ikke kontakt. Kjører backend? (python -m app i copilot/backend)" });
     }

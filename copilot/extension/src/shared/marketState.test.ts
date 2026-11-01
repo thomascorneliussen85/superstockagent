@@ -74,3 +74,13 @@ describe("PanelRelay", () => {
     }
   });
 });
+
+describe("freshness with backend status", () => {
+  it("treats an old price as stale even if just received", () => {
+    let s = reduceMarket(emptyMarketState(), { type: "tick", data: { symbol: "XAUUSD", t: 1, bid: 1, ask: 1.2, spread: 0.2 } }, 1000);
+    s = reduceMarket(s, { type: "status", data: { state: "stale", mode: "mt5_demo", source: "mt5", synthetic: false, symbol: "XAUUSD", lastTickAgeMs: 172_800_000, ticksReceived: 1, reconnects: 0, lastError: null, account: null, warnings: [], serverTime: 0 } }, 1000);
+    const f = freshness(s, 1500);
+    expect(f.level).toBe("stale");
+    expect(f.ageMs).toBeGreaterThan(172_800_000);
+  });
+});

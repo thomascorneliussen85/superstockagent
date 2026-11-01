@@ -67,3 +67,16 @@ describe("formatting", () => {
     expect(eventText({ type: "false_breakout_up", level: 4001.5, tf: "1m", t: 0 })).toBe("Falskt brudd over 4001,50 (likviditetssveip)");
   });
 });
+
+import { formatAge } from "./components/StatusBar";
+
+describe("formatAge", () => {
+  it("is readable for every range", () => {
+    expect(formatAge(null)).toBe("ingen data");
+    expect(formatAge(420)).toBe("420 ms");
+    expect(formatAge(2500)).toBe("2,5 s");
+    expect(formatAge(5 * 60_000)).toBe("5 min");
+    expect(formatAge(3 * 3_600_000)).toBe("3 t");
+    expect(formatAge(172_813_100)).toBe("2 d");
+  });
+});

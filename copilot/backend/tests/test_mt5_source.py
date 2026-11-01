@@ -179,14 +179,16 @@ def test_tick_stream_dedupes_and_converts_time():
         async def collect():
             async for t in agen:
                 got.append(t)
-                if len(got) == 3:
+                if len(got) == 4:
                     break
 
         await asyncio.wait_for(collect(), timeout=5)
         await agen.aclose()
-        assert [t.bid for t in got] == [4000.1, 4000.2, 4000.4]
-        assert got[1].ask == 4000.3
-        assert got[0].time_ms == start + 5 - OFFSET
+        # first the last known price (symbol_info_tick), then only new ticks
+        assert [t.bid for t in got] == [4000.0, 4000.1, 4000.2, 4000.4]
+        assert got[0].time_ms == start - OFFSET
+        assert got[2].ask == 4000.3
+        assert got[1].time_ms == start + 5 - OFFSET
         assert got[0].symbol == "XAUUSD"
 
     asyncio.run(run())

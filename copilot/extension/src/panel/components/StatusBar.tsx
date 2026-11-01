@@ -16,7 +16,7 @@ export function StatusBar({ data }: { data: { conn: ConnState; connDetail?: stri
   const f = freshness(data.market, now);
   const fCls =
     f.level === "fresh" ? "text-tv-up" : f.level === "delayed" ? "text-tv-amber" : f.level === "stale" ? "text-tv-down" : "text-tv-muted";
-  const age = f.ageMs == null ? "ingen data" : f.ageMs < 1000 ? `${f.ageMs} ms` : `${(f.ageMs / 1000).toFixed(1)} s`;
+  const age = formatAge(f.ageMs);
 
   const st = data.market.status;
   const problem =
@@ -40,24 +40,38 @@ export function StatusBar({ data }: { data: { conn: ConnState; connDetail?: stri
         </div>
       )}
     <footer className="flex shrink-0 items-center gap-2 border-t border-tv-border bg-tv-panel px-2 py-1 pr-4 text-[11px] text-tv-muted">
-      <span title={data.connDetail}>
-        {CONN_TEXT[data.conn]}
-        {data.conn !== "connected" && data.connDetail ? ` – ${data.connDetail}` : ""}
+      <span title={data.connDetail} className="truncate">
+        {data.conn !== "connected" ? (
+          <>
+            Backend: {CONN_TEXT[data.conn].toLowerCase()}
+            {data.connDetail ? ` – ${data.connDetail}` : ""}
+          </>
+        ) : st?.synthetic ? (
+          "Demodata"
+        ) : st?.account ? (
+          <span className="text-tv-text">MT5: {st.account.company || st.account.server}</span>
+        ) : (
+          <span className="text-tv-down">MT5: ikke tilkoblet</span>
+        )}
       </span>
-      <span className="ml-auto">
+      <span className="ml-auto shrink-0">
         Data: <span className={fCls}>{age}</span>
       </span>
-      {st?.account && (
-        <span title={`${st.account.company} · konto ${st.account.login}`}>
-          {st.account.server} · {st.account.currency}
-        </span>
-      )}
       {data.market.hello?.readOnly && (
-        <span className="rounded border border-tv-border px-1" title="Backend kan ikke plassere, endre eller lukke handler">
+        <span className="shrink-0 rounded border border-tv-border px-1" title="Backend kan ikke plassere, endre eller lukke handler">
           KUN LESING
         </span>
       )}
     </footer>
     </>
   );
+}
+
+export function formatAge(ms: number | null): string {
+  if (ms == null) return "ingen data";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace(".", ",")} s`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)} min`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)} t`;
+  return `${Math.floor(ms / 86_400_000)} d`;
 }

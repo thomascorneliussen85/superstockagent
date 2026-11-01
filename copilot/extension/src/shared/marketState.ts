@@ -78,8 +78,12 @@ export type Freshness = "fresh" | "delayed" | "stale" | "none";
 /** Classifies how old the latest price is, based on local receive time. */
 export function freshness(state: MarketState, now: number, staleMs = 5000): { level: Freshness; ageMs: number | null } {
   if (state.tickAt == null) return { level: "none", ageMs: null };
-  const age = Math.max(0, now - state.tickAt);
-  if (state.status?.state === "disconnected") return { level: "stale", ageMs: age };
+  let age = Math.max(0, now - state.tickAt);
+  // The backend knows when a price is old (e.g. last price before the weekend).
+  if (state.status?.lastTickAgeMs != null && state.statusAt != null) {
+    age = Math.max(age, state.status.lastTickAgeMs + (now - state.statusAt));
+  }
+  if (state.status?.state === "disconnected" || state.status?.state === "stale") return { level: "stale", ageMs: age };
   if (age > staleMs) return { level: "stale", ageMs: age };
   if (age > 2000) return { level: "delayed", ageMs: age };
   return { level: "fresh", ageMs: age };
