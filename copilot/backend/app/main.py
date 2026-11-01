@@ -81,11 +81,45 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
     return app
 
 
+def port_in_use_message(host: str, port: int) -> str | None:
+    """Explains (in Norwegian) why the port is busy, or None if it is free."""
+    import socket
+    import urllib.request
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            return None
+        except OSError:
+            pass
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/api/health", timeout=2) as r:
+            ours = b"version" in r.read()
+    except Exception:  # noqa: BLE001
+        ours = False
+    if ours:
+        return (
+            f"En AI Copilot-backend kjorer allerede paa port {port} (sannsynligvis et annet svart vindu).\n"
+            "  Lukk det andre vinduet og start paa nytt - eller bruk det som allerede kjorer."
+        )
+    return (
+        f"Port {port} brukes allerede av et annet program.\n"
+        "  Lukk programmet, eller velg en annen port med COPILOT_PORT=8766 i .env\n"
+        "  (og endre adressen i utvidelsens innstillinger tilsvarende)."
+    )
+
+
 def main() -> None:
+    import sys
+
     import uvicorn
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = get_settings()
+    busy = port_in_use_message(settings.host, settings.port)
+    if busy:
+        print(f"\n  FEIL: {busy}\n")
+        sys.exit(3)
     token = load_or_create_token(settings)
     print("\n  AI Trading Copilot backend")
     print(f"  URL:   http://{settings.host}:{settings.port}")

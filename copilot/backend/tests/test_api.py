@@ -74,3 +74,17 @@ def test_ws_streams_analysis_and_rest_endpoint(client):
         assert not h1["insufficient"] and h1["ema"]["200"] is not None  # history backfilled
     r = client.get("/api/analysis", headers=AUTH)
     assert r.status_code == 200 and "alignment" in r.json()
+
+
+def test_port_in_use_message():
+    import socket
+
+    from app.main import port_in_use_message
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        port = s.getsockname()[1]
+        msg = port_in_use_message("127.0.0.1", port)
+        assert msg is not None and "annet program" in msg
+    assert port_in_use_message("127.0.0.1", port) is None
