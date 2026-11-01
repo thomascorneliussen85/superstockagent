@@ -1,5 +1,6 @@
 fastapi>=0.115
-uvicorn[standard]>=0.30
+uvicorn>=0.30
+websockets>=12
 pydantic>=2.7
 pydantic-settings>=2.3
 # MetaTrader5 is Windows-only and added in Phase 2:
