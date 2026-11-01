@@ -135,6 +135,52 @@ export interface Analysis {
   recentEvents: AnalysisEvent[];
 }
 
+// ---- AI commentary (backend app/ai/service.py) ----
+export type Bias = "long" | "short" | "neutral" | "avoid";
+
+export interface AiSetup {
+  direction: "long" | "short";
+  kind: "pullback" | "breakout" | "reversal" | "range" | "none";
+  entryLow: number;
+  entryHigh: number;
+  invalidation: number;
+  target: number;
+  /** Risk/reward computed by the backend (incl. spread), not by the model. */
+  rr: number;
+  riskPerOz: number;
+  spreadAtCheck: number;
+  supporting: string[];
+  conflicting: string[];
+}
+
+export interface AiComment {
+  id: number;
+  createdAt: number;
+  tickTime: number | null;
+  price: { bid: number; ask: number } | null;
+  atr1m: number | null;
+  summary: string;
+  bias: Bias;
+  setup: AiSetup | null;
+  setupRejected: string | null;
+  warnings: string[];
+  reasons: string[];
+  manual: boolean;
+  model: string;
+  costNok: number;
+  tokens: { in: number; out: number };
+}
+
+export interface AiStatus {
+  state: "disabled" | "thinking" | "ready";
+  reason: string | null;
+  note: string | null;
+  model: string | null;
+  pending: string[];
+  cooldownS: number;
+  budget: { monthCapNok: number; monthSpentNok: number; daySpentNok: number; dayAllowanceNok: number; callsToday: number };
+}
+
 export interface TickMsg {
   symbol: string;
   t: number;
@@ -165,13 +211,15 @@ export type ServerMessage =
   | { type: "candle"; data: CandleMsg }
   | { type: "candles"; data: { tf: Timeframe; candles: CandleMsg[] } }
   | { type: "analysis"; data: Analysis }
+  | { type: "ai"; data: AiComment }
+  | { type: "ai_status"; data: AiStatus }
   | { type: "pong"; data: { t: number | null } }
   | { type: "error"; data: { code: string } };
 
-export type ClientMessage = { type: "auth"; token: string } | { type: "ping"; t: number };
+export type ClientMessage = { type: "auth"; token: string } | { type: "ping"; t: number } | { type: "ai_request" };
 
 const KNOWN = new Set([
-  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "pong", "error",
+  "hello", "status", "heartbeat", "symbol", "tick", "candle", "candles", "analysis", "ai", "ai_status", "pong", "error",
 ]);
 
 /** Parses and minimally validates a server frame. Returns null for unknown/malformed input. */

@@ -3,5 +3,7 @@ uvicorn>=0.30
 websockets>=12
 pydantic>=2.7
 pydantic-settings>=2.3
+anthropic>=2.3  # Claude API (server-side fallbacks need a recent SDK)
+tzdata>=2024.1  # time zones (Europe/Oslo) on Windows
 # Read-only MT5 access. Windows-only; wheels exist for Python 3.10-3.14.
 MetaTrader5>=5.0.45 ; sys_platform == "win32"

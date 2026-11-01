@@ -21,6 +21,8 @@ def settings(tmp_path) -> Settings:
         heartbeat_seconds=0.5,
         ws_auth_timeout_seconds=1.0,
         analysis_interval_seconds=0.05,
+        anthropic_api_key=None,  # tests must never call the real API
+        ai_enabled=False,
     )
 
 

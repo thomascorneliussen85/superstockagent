@@ -2,7 +2,7 @@
 
 A Chrome extension that adds an AI panel to TradingView, plus a local Python backend that reads data from MetaTrader 5. It is built for manual scalping of gold (XAUUSD) on the 1-minute chart.
 
-> **Status: Phase 2 (live market data) is done.** The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
+> **Status: Phase 3 (AI) is done.** Claude writes short Norwegian comments and possible setups when something meaningful happens in the market, within a hard monthly budget; optional Norwegian voice alerts. Phase 2: The backend reads XAUUSD from your logged-in MetaTrader 5 terminal (read-only), backfills history, and computes RSI, Supertrend, EMA 9/20/50/200, ATR, market structure, support/resistance, liquidity, breakouts and candlestick patterns on 1m/5m/15m/1h. The panel's **Analyse** tab shows it with a rule-based Norwegian summary. AI commentary is Phase 3.
 >
 > The system is **read-only**. It never places, modifies or closes trades. Nothing in it guarantees profit.
 
@@ -64,10 +64,11 @@ This shows the same panel on a mock chart page, connected directly to the backen
 ## Tests
 
 ```bash
-cd copilot/backend && pytest            # 59 tests: indicators (RSI checked against Wilder's published values),
+cd copilot/backend && pytest            # 76 tests: AI (budget, triggers, setup validation, real-SDK request
+                                        # with mocked HTTP, service end-to-end), plus: indicators (RSI checked against Wilder's published values),
                                         # structure/levels/patterns, engine, MT5 source (fake terminal),
                                         # read-only guard, candles, auth/origin, WebSocket, hub
-cd copilot/extension && npm test        # 26 tests: reducer, Norwegian summaries, geometry, WebSocket client
+cd copilot/extension && npm test        # 33 tests: reducer, Norwegian summaries, voice alerts, geometry, WebSocket client
 cd copilot/extension && npm run build   # type-check + production build
 ```
 
@@ -91,6 +92,30 @@ There are four votes, each −1, 0 or +1:
 4. Price above or below EMA 200.
 
 A sum of +2 or more means **Opptrend** (uptrend). −2 or less means **Nedtrend** (downtrend). Anything else is **Sideveis/uklar** (sideways/unclear). This is a description of the current state, not a prediction.
+
+## AI commentary (Phase 3)
+
+1. Get an API key at console.anthropic.com and add `ANTHROPIC_API_KEY=sk-ant-...` to `copilot/backend/.env`. The key stays on the PC; the browser never sees it.
+2. Restart the backend. The window shows `AI: claude-opus-5-5, maks 50 kr/mnd`.
+3. Open the **AI** tab in the panel.
+
+**How it works**
+
+- **Event-driven.** The deterministic analysis is compared with the previous state, once per second. A new AI call is triggered only by meaningful changes:
+  - a structure break, breakout or false breakout on 1m/5m/15m
+  - a trend change on 5m/15m/1h
+  - 5m RSI entering overbought or oversold
+  - spread turning high
+  - price reaching a level with two or more touches
+
+  Automatic calls are at least 2 minutes apart. Pending reasons are batched into one call. **Spør AI nå** (ask now) skips the wait, but never the budget. No AI calls are made while the market is closed or on demo data.
+- **What Claude gets.** A compact JSON snapshot of about 1.5k tokens (`app/ai/prompt.py`). It returns structured JSON: summary, bias, a possible setup, warnings, and evidence for and against.
+- **What code checks.** The levels must be on the correct side of the entry, and the entry must be close to the price. R/R is computed by code and includes the spread; it is never taken from the model. No confidence is shown, because it hasn't been calibrated yet.
+- **Budget.** Every call is logged with tokens and cost in `data/copilot.db`. A call is only made if its *worst-case* cost fits within:
+  - the monthly cap
+  - today's share of what is left (remaining budget ÷ remaining weekdays)
+- **Kept for later learning.** The snapshot and the response are stored separately from trades, for later evaluation.
+- **Voice alerts** are off by default and switched on in the AI tab. They cover setups, 5m/15m breaks and high spread, with cooldowns and deduplication. Only the visible TradingView tab speaks.
 
 ## Configuration (`copilot/backend/.env`, see `.env.example`)
 

@@ -11,7 +11,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -81,6 +81,21 @@ class Settings(BaseSettings):
     ws_auth_timeout_seconds: float = 5.0
     ws_queue_size: int = 500
     analysis_interval_seconds: float = 1.0
+
+    # --- AI commentary (Claude). The key stays on this PC; it is never sent to the browser.
+    ai_enabled: bool = True
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("COPILOT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"),
+    )
+    ai_model: str = "claude-opus-5-5"
+    ai_effort: str = "low"  # low | medium | high - controls thinking depth and token spend
+    ai_max_tokens: int = 2500  # hard per-call cap on output (incl. thinking) tokens
+    ai_monthly_budget_nok: float = 50.0
+    ai_usd_nok: float = 10.5  # exchange rate used to convert the NOK budget to USD
+    ai_min_interval_seconds: float = 120.0  # minimum gap between automatic AI calls
+    ai_allow_demo: bool = False  # don't spend money on synthetic prices by default
+    ai_fallbacks: bool = True  # server-side fallback model if Claude declines a request
 
     @field_validator("host")
     @classmethod

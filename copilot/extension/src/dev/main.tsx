@@ -20,6 +20,9 @@ const client = new BackendClient({
 
 const transport: PanelTransport = {
   subscribe: (cb) => relay.subscribe(cb),
+  send(msg) {
+    client.request(msg);
+  },
   openOptions() {
     const t = prompt("Backend-token:", token);
     if (t != null) location.search = `?token=${encodeURIComponent(t)}`;

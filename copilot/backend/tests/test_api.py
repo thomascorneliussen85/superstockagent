@@ -88,3 +88,13 @@ def test_port_in_use_message():
         msg = port_in_use_message("127.0.0.1", port)
         assert msg is not None and "annet program" in msg
     assert port_in_use_message("127.0.0.1", port) is None
+
+
+def test_ai_status_reports_disabled_without_spending(client):
+    with client.websocket_connect("/ws", headers=EXT_ORIGIN) as ws:
+        ws.send_json({"type": "auth", "token": TOKEN})
+        st = recv_until(ws, "ai_status", limit=20000)["data"]
+        assert st["state"] == "disabled" and "COPILOT_AI_ENABLED" in st["reason"]
+        ws.send_json({"type": "ai_request"})  # must not crash or call anything
+        ws.send_json({"type": "ping", "t": 5})
+        assert recv_until(ws, "pong")["data"]["t"] == 5

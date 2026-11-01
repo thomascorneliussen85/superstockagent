@@ -40,6 +40,7 @@ export const KEYS = {
   geom: "copilot.panelGeom",
   tab: "copilot.activeTab",
   visible: "copilot.visible",
+  voice: "copilot.voice",
 } as const;
 
 export const DEFAULT_BACKEND: BackendConfig = { url: "http://127.0.0.1:8765", token: "" };

@@ -84,3 +84,11 @@ describe("freshness with backend status", () => {
     expect(f.ageMs).toBeGreaterThan(172_800_000);
   });
 });
+
+describe("freshness while live", () => {
+  it("does not age a live feed by an old status message", () => {
+    let s = reduceMarket(emptyMarketState(), { type: "status", data: { state: "live", mode: "demo", source: "synthetic", synthetic: true, symbol: "XAUUSD", lastTickAgeMs: 20, ticksReceived: 1, reconnects: 0, lastError: null, account: null, warnings: [], serverTime: 0 } }, 0);
+    s = reduceMarket(s, { type: "tick", data: { symbol: "XAUUSD", t: 1, bid: 1, ask: 1.2, spread: 0.2 } }, 30_000);
+    expect(freshness(s, 30_300)).toEqual({ level: "fresh", ageMs: 300 });
+  });
+});

@@ -91,8 +91,12 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 m = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if isinstance(m, dict) and m.get("type") == "ping":
+            if not isinstance(m, dict):
+                continue
+            if m.get("type") == "ping":
                 await ws.send_json({"type": "pong", "data": {"t": m.get("t")}})
+            elif m.get("type") == "ai_request":
+                app.state.ai.request_manual()
 
     tasks = [asyncio.create_task(pump()), asyncio.create_task(reader())]
     try:

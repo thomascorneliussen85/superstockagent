@@ -1,18 +1,8 @@
 import type { TabId } from "../App";
 
-type PlannedId = Exclude<TabId, "market" | "analysis">;
+type PlannedId = Exclude<TabId, "market" | "analysis" | "signals">;
 
 const PLANNED: Record<PlannedId, { phase: string; title: string; items: string[] }> = {
-  signals: {
-    phase: "Fase 3",
-    title: "Mulige oppsett",
-    items: [
-      "AI-forklaring på norsk – kun ved relevante endringer",
-      "Retning, inngangssone, invalidering, mål og R/R",
-      "Støttende og motstridende bevis",
-      "Datafriskhet – konfidens vises kun når den er kalibrert historisk",
-    ],
-  },
   positions: {
     phase: "Fase 4",
     title: "Posisjoner og risiko (kun lesing)",

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MarketState } from "../shared/marketState";
 import type { KVStore } from "../shared/storage";
 import { KEYS } from "../shared/storage";
 import type { PanelTransport } from "../shared/transport";
@@ -6,15 +7,17 @@ import { PanelFrame } from "./components/PanelFrame";
 import { AnalysisTab } from "./components/AnalysisTab";
 import { MarketTab } from "./components/MarketTab";
 import { PlannedTab } from "./components/PlannedTab";
+import { SignalsTab } from "./components/SignalsTab";
 import { StatusBar } from "./components/StatusBar";
 import { usePanelData } from "./usePanel";
+import { AlertGate, alertsBetween, DEFAULT_VOICE, speak, type VoiceSettings } from "./voice";
 
 export type TabId = "market" | "analysis" | "signals" | "positions" | "coach";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "market", label: "Marked" },
   { id: "analysis", label: "Analyse" },
-  { id: "signals", label: "Signaler" },
+  { id: "signals", label: "AI" },
   { id: "positions", label: "Posisjoner" },
   { id: "coach", label: "Coach" },
 ];
@@ -41,6 +44,15 @@ export function App({ transport, store }: Props) {
   }, [store]);
 
   const data = usePanelData(transport, toggle);
+  const [voice, setVoice] = useState<VoiceSettings>(DEFAULT_VOICE);
+  useEffect(() => {
+    void store.get<VoiceSettings>(KEYS.voice).then((v) => v && setVoice({ ...DEFAULT_VOICE, ...v, types: { ...DEFAULT_VOICE.types, ...v.types } }));
+  }, [store]);
+  const updateVoice = (v: VoiceSettings) => {
+    setVoice(v);
+    void store.set(KEYS.voice, v);
+  };
+  useVoiceAlerts(data.market, voice);
   const selectTab = (t: TabId) => {
     setTab(t);
     void store.set(KEYS.tab, t);
@@ -81,6 +93,14 @@ export function App({ transport, store }: Props) {
             <MarketTab market={data.market} />
           ) : tab === "analysis" ? (
             <AnalysisTab market={data.market} />
+          ) : tab === "signals" ? (
+            <SignalsTab
+              market={data.market}
+              connected={data.conn === "connected"}
+              onAsk={() => transport.send({ type: "ai_request" })}
+              voice={voice}
+              onVoice={updateVoice}
+            />
           ) : (
             <PlannedTab tab={tab} />
           )}
@@ -89,4 +109,18 @@ export function App({ transport, store }: Props) {
       </PanelFrame>
     </div>
   );
+}
+
+/** Speaks new alerts (only in the visible tab, so several TradingView tabs never talk at once). */
+function useVoiceAlerts(market: MarketState, voice: VoiceSettings) {
+  const prev = useRef<MarketState | null>(null);
+  const gate = useRef(new AlertGate());
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = market;
+    if (!voice.enabled || document.visibilityState !== "visible") return;
+    for (const a of alertsBetween(before, market)) {
+      if (gate.current.allow(a, Date.now(), voice)) speak(a.text, voice.volume);
+    }
+  }, [market, voice]);
 }

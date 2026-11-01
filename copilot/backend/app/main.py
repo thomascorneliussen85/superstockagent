@@ -14,6 +14,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .ai.budget import BudgetGuard
+from .ai.ledger import Ledger
+from .ai.llm import ClaudeCommentator
+from .ai.service import AIService
 from .analysis.service import AnalysisService
 from .api import routes, ws
 from .config import Settings, TradingMode, get_settings
@@ -39,6 +43,36 @@ def build_source(settings: Settings) -> MarketDataSource:
     )
 
 
+def build_ai(settings: Settings, hub: MarketHub, analysis: AnalysisService) -> AIService:
+    ledger = Ledger(settings.data_dir / "copilot.db")
+    budget = BudgetGuard(ledger, settings.ai_monthly_budget_nok, settings.ai_usd_nok)
+    commentator = None
+    reason = None
+    if not settings.ai_enabled:
+        reason = "AI er slått av (COPILOT_AI_ENABLED=false)."
+    elif settings.anthropic_api_key is None or not settings.anthropic_api_key.get_secret_value().strip():
+        reason = "Mangler Anthropic API-nøkkel. Legg ANTHROPIC_API_KEY=... i .env og start backend på nytt."
+    else:
+        commentator = ClaudeCommentator(
+            settings.anthropic_api_key.get_secret_value().strip(),
+            settings.ai_model,
+            settings.ai_effort,
+            settings.ai_max_tokens,
+            settings.ai_fallbacks,
+        )
+    return AIService(
+        hub,
+        analysis,
+        ledger,
+        budget,
+        commentator,
+        usd_nok=settings.ai_usd_nok,
+        min_interval_s=settings.ai_min_interval_seconds,
+        allow_synthetic=settings.ai_allow_demo,
+        disabled_reason=reason,
+    )
+
+
 def create_app(settings: Settings | None = None, source: MarketDataSource | None = None) -> FastAPI:
     settings = settings or get_settings()
     policy = OriginPolicy(settings)
@@ -55,14 +89,18 @@ def create_app(settings: Settings | None = None, source: MarketDataSource | None
         app.state.hub = hub
         analysis = AnalysisService(hub, interval=settings.analysis_interval_seconds)
         app.state.analysis = analysis
+        app.state.ai = build_ai(settings, hub, analysis)
         await hub.start()
         analysis.start()
+        app.state.ai.start()
         log.info(
             "AI Trading Copilot backend %s started (mode=%s, read-only)", __version__, settings.mode.value
         )
         try:
             yield
         finally:
+            await app.state.ai.stop()
+            app.state.ai.ledger.close()
             await analysis.stop()
             await hub.stop()
 
@@ -125,5 +163,9 @@ def main() -> None:
     print(f"  URL:   http://{settings.host}:{settings.port}")
     print(f"  Mode:  {settings.mode.value} (read-only - places no trades)")
     print(f"  Token: {token}")
+    if settings.anthropic_api_key and settings.ai_enabled:
+        print(f"  AI:    {settings.ai_model}, maks {settings.ai_monthly_budget_nok:.0f} kr/mnd")
+    else:
+        print("  AI:    av (legg ANTHROPIC_API_KEY=... i .env for aa slaa paa)")
     print("  Paste the URL and token into the extension's options page.\n")
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")

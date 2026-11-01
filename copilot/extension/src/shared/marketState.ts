@@ -1,6 +1,6 @@
 // Pure reducer holding the latest market view. Used by the background worker
 // (to hydrate newly opened panels) and by the panel itself.
-import type { Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
+import type { AiComment, AiStatus, Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
 
 export const MAX_CANDLES = 300;
 
@@ -17,6 +17,8 @@ export interface MarketState {
   analysis: Analysis | null;
   /** Local receive time of the latest analysis. */
   analysisAt: number | null;
+  ai: AiComment | null;
+  aiStatus: AiStatus | null;
 }
 
 export const emptyMarketState = (): MarketState => ({
@@ -29,6 +31,8 @@ export const emptyMarketState = (): MarketState => ({
   candles: { "1m": [], "5m": [], "15m": [], "1h": [] },
   analysis: null,
   analysisAt: null,
+  ai: null,
+  aiStatus: null,
 });
 
 export function upsertCandle(list: CandleMsg[], c: CandleMsg, max = MAX_CANDLES): CandleMsg[] {
@@ -64,6 +68,10 @@ export function reduceMarket(state: MarketState, msg: ServerMessage, now: number
     }
     case "analysis":
       return { ...state, analysis: msg.data, analysisAt: now };
+    case "ai":
+      return { ...state, ai: msg.data };
+    case "ai_status":
+      return { ...state, aiStatus: msg.data };
     case "candles": {
       const sorted = [...msg.data.candles].sort((a, b) => a.t - b.t).slice(-MAX_CANDLES);
       return { ...state, candles: { ...state.candles, [msg.data.tf]: sorted } };
@@ -80,8 +88,11 @@ export function freshness(state: MarketState, now: number, staleMs = 5000): { le
   if (state.tickAt == null) return { level: "none", ageMs: null };
   let age = Math.max(0, now - state.tickAt);
   // The backend knows when a price is old (e.g. last price before the weekend).
-  if (state.status?.lastTickAgeMs != null && state.statusAt != null) {
-    age = Math.max(age, state.status.lastTickAgeMs + (now - state.statusAt));
+  // Only trust its age while it reports the feed as not live; status messages are
+  // not resent on every tick, so in the live state the local receive time is exact.
+  const st = state.status;
+  if (st && st.state !== "live" && st.lastTickAgeMs != null && state.statusAt != null) {
+    age = Math.max(age, st.lastTickAgeMs + (now - state.statusAt));
   }
   if (state.status?.state === "disconnected" || state.status?.state === "stale") return { level: "stale", ageMs: age };
   if (age > staleMs) return { level: "stale", ageMs: age };

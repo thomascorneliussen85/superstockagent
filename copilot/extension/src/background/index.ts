@@ -9,7 +9,7 @@ import { BackendClient, type BackendConfig } from "../shared/backendClient";
 import { emptyMarketState, reduceMarket, type MarketState } from "../shared/marketState";
 import type { ConnState } from "../shared/protocol";
 import { DEFAULT_BACKEND, KEYS, chromeStore } from "../shared/storage";
-import { PORT_NAME, type PanelEvent } from "../shared/transport";
+import { PORT_NAME, type PanelEvent, type PortRequest } from "../shared/transport";
 
 const ports = new Set<chrome.runtime.Port>();
 let market: MarketState = emptyMarketState();
@@ -57,6 +57,9 @@ chrome.runtime.onConnect.addListener((port) => {
   ports.add(port);
   port.postMessage({ kind: "snapshot", conn, detail: connDetail, market } satisfies PanelEvent);
   void ensureRunning();
+  port.onMessage.addListener((req: PortRequest) => {
+    if (req?.kind === "client" && req.msg?.type === "ai_request") client.request(req.msg);
+  });
   port.onDisconnect.addListener(() => {
     ports.delete(port);
     if (ports.size === 0) {

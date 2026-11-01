@@ -92,8 +92,15 @@ export class BackendClient {
     this.pingTimer = null;
   }
 
-  private send(m: ClientMessage) {
-    if (this.ws?.readyState === this.WS.OPEN) this.ws.send(JSON.stringify(m));
+  private send(m: ClientMessage): boolean {
+    if (this.ws?.readyState !== this.WS.OPEN) return false;
+    this.ws.send(JSON.stringify(m));
+    return true;
+  }
+
+  /** Send an application message (not auth/ping). Returns false when not connected. */
+  request(m: Exclude<ClientMessage, { type: "auth" }>): boolean {
+    return this.state === "connected" && this.send(m);
   }
 
   private connect() {
