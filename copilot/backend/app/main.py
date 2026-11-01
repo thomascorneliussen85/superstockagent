@@ -147,6 +147,33 @@ def port_in_use_message(host: str, port: int) -> str | None:
     )
 
 
+def ai_key_diagnosis(settings: Settings) -> list[str]:
+    """Plain-language hints for why no Anthropic API key was found (ASCII only for cmd.exe)."""
+    from .config import BACKEND_DIR
+
+    if not settings.ai_enabled:
+        return ["COPILOT_AI_ENABLED=false i .env."]
+    env = BACKEND_DIR / ".env"
+    hints = [f"Fant ingen ANTHROPIC_API_KEY. Backend leser: {env}"]
+    if not env.exists() and not (BACKEND_DIR / ".env.txt").exists():
+        hints.append("Filen .env finnes ikke i denne mappen.")
+    example = BACKEND_DIR / ".env.example"
+    try:
+        for raw in example.read_text(encoding="utf-8-sig").splitlines():
+            if raw.strip().startswith("ANTHROPIC_API_KEY=sk-"):
+                hints.append("Nokkelen ligger i .env.example - flytt linjen til .env.")
+    except OSError:
+        pass
+    try:
+        text = env.read_text(encoding="utf-8-sig") if env.exists() else ""
+        if "# ANTHROPIC_API_KEY" in text and "\nANTHROPIC_API_KEY" not in "\n" + text:
+            hints.append("Linjen starter med # (kommentar). Fjern # foran ANTHROPIC_API_KEY.")
+    except OSError:
+        pass
+    hints.append("Legg linjen ANTHROPIC_API_KEY=sk-ant-... nederst i .env og start paa nytt.")
+    return hints
+
+
 def main() -> None:
     import sys
 
@@ -166,6 +193,8 @@ def main() -> None:
     if settings.anthropic_api_key and settings.ai_enabled:
         print(f"  AI:    {settings.ai_model}, maks {settings.ai_monthly_budget_nok:.0f} kr/mnd")
     else:
-        print("  AI:    av (legg ANTHROPIC_API_KEY=... i .env for aa slaa paa)")
+        print("  AI:    av")
+        for line in ai_key_diagnosis(settings):
+            print(f"         {line}")
     print("  Paste the URL and token into the extension's options page.\n")
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")

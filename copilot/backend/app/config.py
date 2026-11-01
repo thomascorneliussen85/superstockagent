@@ -35,7 +35,8 @@ class TradingMode(StrEnum):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="COPILOT_",
-        env_file=BACKEND_DIR / ".env",
+        # ".env.txt" too: Windows Notepad silently appends .txt when saving.
+        env_file=(BACKEND_DIR / ".env.txt", BACKEND_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

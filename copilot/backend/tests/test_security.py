@@ -39,3 +39,22 @@ def test_non_loopback_host_rejected():
 
     with pytest.raises(ValidationError):
         Settings(host="0.0.0.0")
+
+
+def test_env_txt_from_notepad_is_read(tmp_path, monkeypatch):
+    """Windows Notepad saves '.env' as '.env.txt'; the key must still be found."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("COPILOT_ANTHROPIC_API_KEY", raising=False)
+    (tmp_path / ".env.txt").write_bytes(b"\xef\xbb\xbfANTHROPIC_API_KEY=sk-ant-abc\r\n")
+    s = Settings(_env_file=(tmp_path / ".env.txt", tmp_path / ".env"))
+    assert s.anthropic_api_key.get_secret_value() == "sk-ant-abc"
+
+
+def test_ai_key_diagnosis_mentions_commented_line(tmp_path, monkeypatch):
+    import app.config as cfg
+    from app.main import ai_key_diagnosis
+
+    monkeypatch.setattr(cfg, "BACKEND_DIR", tmp_path)
+    (tmp_path / ".env").write_text("COPILOT_MODE=mt5\n# ANTHROPIC_API_KEY=sk-ant-x\n", encoding="utf-8")
+    hints = ai_key_diagnosis(Settings(anthropic_api_key=None))
+    assert any("# " in h or "Fjern #" in h for h in hints)
