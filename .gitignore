@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
+copilot/backend/data/
+node_modules/
+copilot/extension/dist/

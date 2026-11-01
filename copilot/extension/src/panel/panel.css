@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Inside the shadow root there is no html/body; scope base styles to the panel. */
+.copilot-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #d1d4dc;
+  -webkit-font-smoothing: antialiased;
+}
+
+.copilot-root ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.copilot-root ::-webkit-scrollbar-thumb {
+  background: #363a45;
+  border-radius: 3px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

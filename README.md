@@ -34,3 +34,7 @@ Add these under **Settings → Secrets and variables → Actions → New reposit
 | `EMAIL_TO` | for email | Where to send the report |
 
 Test it from **Actions → Morning scan → Run workflow**. A run fails (and GitHub emails you) if no market data could be fetched or a notification could not be sent.
+
+## AI Trading Copilot (XAUUSD)
+
+A separate project lives in [`copilot/`](copilot/README.md): a TradingView Chrome extension and a local MT5 backend for gold scalping, with AI analysis and coaching.
