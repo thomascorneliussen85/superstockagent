@@ -204,10 +204,10 @@ class MarketHub:
         last = candles[-1]
         for c in candles[:-1]:
             hist.append(replace(c, closed=True))
-        if last.closed:
-            hist.append(replace(last))
-        else:
-            self._builders[tf].seed(replace(last))
+        # The newest bar always seeds the builder - even if it is already closed
+        # (e.g. Friday's last bar during the weekend). Otherwise a tick inside that
+        # same period would start a second, duplicate candle for it.
+        self._builders[tf].seed(replace(last))
         self.version += 1
         self.closed_version += 1
 

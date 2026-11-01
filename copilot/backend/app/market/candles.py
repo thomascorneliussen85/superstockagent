@@ -72,6 +72,7 @@ class CandleBuilder:
                 max_spread=tick.spread,
             )
         else:
+            cur.closed = False  # a tick inside its period means it is still forming
             cur.high = max(cur.high, price)
             cur.low = min(cur.low, price)
             cur.close = price

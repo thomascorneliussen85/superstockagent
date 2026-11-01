@@ -101,3 +101,23 @@ def test_old_tick_is_stale_immediately():
     assert hub.status_payload()["lastTickAgeMs"] >= 2 * 86_400_000
     hub.ingest(Tick("XAUUSD", clock.now - 500, 10.0, 10.2))  # live again
     assert hub.stats.state == FeedState.LIVE
+
+
+def test_weekend_last_price_does_not_duplicate_last_bar():
+    """Regression: last tick inside an already-closed seeded bar must not create a 2nd candle."""
+    from app.market.models import Candle, Timeframe
+
+    clock = FakeClock()
+    hub = make_hub(clock)
+    t0 = 1_700_000_040_000 - 2 * 86_400_000  # Friday, minute boundary
+    bars = [Candle("XAUUSD", Timeframe.M1, t0 + i * 60_000, 10.0, 12.0, 9.0, 11.0, closed=True) for i in range(5)]
+    hub.seed_history(Timeframe.M1, bars)
+    hub.ingest(Tick("XAUUSD", bars[-1].open_time_ms + 59_000, 11.0, 11.2))  # last known price
+    candles = hub.candles(Timeframe.M1)
+    assert len(candles) == 5
+    last = candles[-1]
+    assert (last.open, last.high, last.low, last.close) == (10.0, 12.0, 9.0, 11.0)
+    # A new tick in the next minute closes it and starts a new candle
+    hub.ingest(Tick("XAUUSD", bars[-1].open_time_ms + 61_000, 11.5, 11.7))
+    candles = hub.candles(Timeframe.M1)
+    assert len(candles) == 6 and candles[-2].closed and candles[-1].open == 11.5
