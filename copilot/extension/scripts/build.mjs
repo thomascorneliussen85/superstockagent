@@ -50,6 +50,7 @@ await build({
         options: resolve(root, "src/options/options.html"),
         journal: resolve(root, "src/journal/journal.html"),
         replay: resolve(root, "src/replay/replay.html"),
+        chart: resolve(root, "src/chart/chart.html"),
       },
     },
   },

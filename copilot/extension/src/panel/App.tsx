@@ -100,7 +100,7 @@ export function App({ transport, store }: Props) {
           {tab === "market" ? (
             <MarketTab market={data.market} />
           ) : tab === "analysis" ? (
-            <AnalysisTab market={data.market} />
+            <AnalysisTab market={data.market} onOpenChart={() => transport.openPage("chart")} />
           ) : tab === "signals" ? (
             <SignalsTab
               market={data.market}

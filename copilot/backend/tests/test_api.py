@@ -87,7 +87,7 @@ def test_port_in_use_message():
         port = s.getsockname()[1]
         msg = port_in_use_message("127.0.0.1", port)
         assert msg is not None and "annet program" in msg
-    assert port_in_use_message("127.0.0.1", port) is None
+    assert port_in_use_message("127.0.0.1", port) is None  # closed -> free (even in TIME_WAIT)
 
 
 def test_ai_status_reports_disabled_without_spending(client):

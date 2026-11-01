@@ -39,6 +39,20 @@ async def get_analysis(request: Request) -> dict:
     return last
 
 
+@router.get("/candles", dependencies=[Depends(require_token)])
+async def get_candles(request: Request, tf: str = "1m", limit: int = 500) -> dict:
+    """Full candle history for the live chart page (the WebSocket snapshot only carries ~120)."""
+    from ..market.models import Timeframe
+
+    hub = request.app.state.hub
+    try:
+        t = Timeframe(tf)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ukjent tidsramme") from exc
+    digits = hub.spec.digits if hub.spec else 2
+    return {"tf": tf, "candles": [c.to_wire(digits) for c in hub.candles(t)[-max(1, min(limit, 1000)) :]]}
+
+
 @router.get("/symbol", dependencies=[Depends(require_token)])
 async def get_symbol(request: Request) -> dict:
     hub = request.app.state.hub

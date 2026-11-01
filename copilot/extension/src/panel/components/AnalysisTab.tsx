@@ -7,7 +7,7 @@ import { useNow } from "../usePanel";
 const trendCls = (l?: string) => (l === "up" ? "text-tv-up" : l === "down" ? "text-tv-down" : "text-tv-muted");
 const arrow = (l?: string) => (l === "up" ? "▲" : l === "down" ? "▼" : "◆");
 
-export function AnalysisTab({ market }: { market: MarketState }) {
+export function AnalysisTab({ market, onOpenChart }: { market: MarketState; onOpenChart?: () => void }) {
   const [tf, setTf] = useState<Timeframe>("1m");
   const now = useNow(1000);
   const a = market.analysis;
@@ -19,6 +19,11 @@ export function AnalysisTab({ market }: { market: MarketState }) {
 
   return (
     <div className="space-y-3">
+      {onOpenChart && (
+        <button onClick={onOpenChart} className="w-full rounded bg-tv-blue px-2 py-1 text-xs text-white hover:opacity-90">
+          Åpne chart med nivåer, trendlinjer, volum og AI-soner
+        </button>
+      )}
       {/* Multi-timeframe overview */}
       <table className="tabular w-full text-xs">
         <thead className="text-tv-muted">

@@ -168,12 +168,12 @@ def port_in_use_message(host: str, port: int) -> str | None:
     import socket
     import urllib.request
 
+    # Is something actually listening? (A plain bind test gives false alarms for a minute
+    # after a restart because of TIME_WAIT sockets.)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind((host, port))
+        s.settimeout(1.0)
+        if s.connect_ex((host if host != "localhost" else "127.0.0.1", port)) != 0:
             return None
-        except OSError:
-            pass
     try:
         with urllib.request.urlopen(f"http://{host}:{port}/api/health", timeout=2) as r:
             ours = b"version" in r.read()

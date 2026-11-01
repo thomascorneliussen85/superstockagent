@@ -146,6 +146,16 @@ A sum of +2 or more means **Opptrend** (uptrend). −2 or less means **Nedtrend*
 - **Daily result.** Today's closed trades (profit + commission + swap) plus floating P/L, with the day starting at midnight Oslo time.
 - **AI context.** Claude is told about your open gold positions, but is instructed never to tell you to close, add or move anything.
 
+## Chart overlays: levels, trendlines, volume, AI zones
+
+- **Live chart page.** Open it from the panel's Analyse tab with *Åpne chart med nivåer …*. It uses live MT5 candles and has toggles for four overlays:
+  - support/resistance with touch counts (the next higher timeframe's strongest levels drawn thicker)
+  - trendlines through the last two rising lows / falling highs (dashed when broken)
+  - a tick-volume profile of the last day: POC, 70 % value area, high-volume nodes
+  - the latest AI setup: entry zone, invalidation and target with R/R, shown for 30 minutes
+- **Replay.** The replay page has the same overlays, computed from replay data only.
+- **TradingView itself.** Extensions cannot draw on TradingView's chart. `copilot/tradingview/ai_copilot_nivaaer.pine` is a Pine Script indicator that draws the same levels, trendlines and POC with the same rules. AI zones can't be shown there.
+
 ## Journal & coach (Phases 5-6)
 
 The page opens from the panel's **Coach** tab via **Journal og coach**.

@@ -1,10 +1,10 @@
-import { createChart, type IChartApi, type IPriceLine, type ISeriesApi, type SeriesMarker, type Time, type UTCTimestamp } from "lightweight-charts";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { BackendClient, BackendConfig } from "../shared/backendClient";
 import { emptyMarketState, reduceMarket, type MarketState } from "../shared/marketState";
-import type { CandleMsg, ConnState, ReplayState, ServerMessage, Timeframe } from "../shared/protocol";
+import type { ConnState, ReplayState, ServerMessage, Timeframe } from "../shared/protocol";
 import { chromeStore, localStore, type KVStore } from "../shared/storage";
 import { connect, loadConfig } from "../pages/conn";
+import { ChartView, DEFAULT_OVERLAYS, OverlayToggles, type Overlays } from "../pages/ChartView";
 import { AnalysisTab } from "../panel/components/AnalysisTab";
 import { no } from "../panel/describe";
 import { ACTION_LABEL, actionFor, comboOf, DEFAULT_HOTKEYS, nextSpeed, orderRisk, SPEEDS, type HotkeyAction } from "./hotkeys";
@@ -13,11 +13,6 @@ const store: KVStore = typeof chrome !== "undefined" && chrome.storage ? chromeS
 const TICKET_KEY = "copilot.replayTicket";
 const HOTKEY_KEY = "copilot.replayHotkeys";
 
-/** Lightweight Charts plots UTC; shift by the Oslo offset so the axis shows local time. */
-const localSec = (ms: number) => {
-  const off = -new Date(ms).getTimezoneOffset() * 60;
-  return (Math.floor(ms / 1000) + off) as UTCTimestamp;
-};
 const hms = (ms?: number) => (ms ? new Date(ms).toLocaleString("nb-NO", { dateStyle: "short", timeStyle: "medium" }) : "–");
 const toInputValue = (ms: number) => {
   const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000);
@@ -39,6 +34,7 @@ export function ReplayApp() {
   const [hotkeys, setHotkeys] = useState(DEFAULT_HOTKEYS);
   const [editing, setEditing] = useState<HotkeyAction | null>(null);
   const [showKeys, setShowKeys] = useState(false);
+  const [overlays, setOverlays] = useState<Overlays>(DEFAULT_OVERLAYS);
   const client = useRef<BackendClient | null>(null);
 
   useEffect(() => {
@@ -170,13 +166,24 @@ export function ReplayApp() {
                 {k}
               </button>
             ))}
+            <span className="mx-2" />
+            <OverlayToggles value={overlays} onChange={setOverlays} />
             {tick && (
               <span className="tabular ml-auto font-mono text-tv-text">
                 Bid {no(tick.bid, 2)} · Ask {no(tick.ask, 2)} · Spread {no(tick.spread, 2)}
               </span>
             )}
           </div>
-          <Chart candles={market.candles[tf]} tfMs={{ "1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000 }[tf]} positions={acc?.positions ?? []} trades={trades} />
+          <ChartView
+            candles={market.candles[tf]}
+            tf={tf}
+            analysis={market.analysis}
+            ai={market.ai && market.ai.reasons.includes("replay") ? market.ai : null}
+            overlays={overlays}
+            nowMs={rs.clockMs}
+            positions={acc?.positions ?? []}
+            trades={trades}
+          />
           {!rs.active && (
             <p className="p-4 text-sm text-tv-muted">
               Velg et tidspunkt i fortiden og trykk «Start herfra». Lysene bygges sekund for sekund av ekte historiske ticks fra MT5. Analysen og AI-en ser bare
@@ -312,68 +319,4 @@ function SessionSummary({ trades }: { trades: NonNullable<ReplayState["account"]
       </table>
     </section>
   );
-}
-
-function Chart({ candles, tfMs, positions, trades }: {
-  candles: CandleMsg[];
-  tfMs: number;
-  positions: NonNullable<ReplayState["account"]>["positions"];
-  trades: NonNullable<ReplayState["account"]>["trades"];
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const chart = useRef<IChartApi | null>(null);
-  const series = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const lines = useRef<IPriceLine[]>([]);
-  const lastKey = useRef<string>("");
-
-  useEffect(() => {
-    if (!box.current) return;
-    const c = createChart(box.current, {
-      autoSize: true,
-      layout: { background: { color: "#131722" }, textColor: "#d1d4dc" },
-      grid: { vertLines: { color: "#1e222d" }, horzLines: { color: "#1e222d" } },
-      timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#2a2e39" },
-      rightPriceScale: { borderColor: "#2a2e39" },
-      crosshair: { mode: 0 },
-    });
-    series.current = c.addCandlestickSeries({
-      upColor: "#26a69a", downColor: "#ef5350", borderVisible: false, wickUpColor: "#26a69a", wickDownColor: "#ef5350",
-    });
-    chart.current = c;
-    return () => c.remove();
-  }, []);
-
-  useEffect(() => {
-    const s = series.current;
-    if (!s || candles.length === 0) return;
-    const key = `${candles.length}:${candles[0].t}`;
-    const bar = (c: CandleMsg) => ({ time: localSec(c.t) as Time, open: c.o, high: c.h, low: c.l, close: c.c });
-    if (key === lastKey.current) s.update(bar(candles[candles.length - 1]));
-    else {
-      s.setData(candles.map(bar));
-      lastKey.current = key;
-    }
-  }, [candles]);
-
-  useEffect(() => {
-    const s = series.current;
-    if (!s) return;
-    lines.current.forEach((l) => s.removePriceLine(l));
-    lines.current = [];
-    for (const p of positions) {
-      const col = p.side === "buy" ? "#26a69a" : "#ef5350";
-      lines.current.push(s.createPriceLine({ price: p.entry, color: col, lineWidth: 1, lineStyle: 0, title: p.side === "buy" ? "LONG" : "SHORT" }));
-      if (p.sl) lines.current.push(s.createPriceLine({ price: p.sl, color: "#ef5350", lineWidth: 1, lineStyle: 2, title: "SL" }));
-      if (p.tp) lines.current.push(s.createPriceLine({ price: p.tp, color: "#26a69a", lineWidth: 1, lineStyle: 2, title: "TP" }));
-    }
-    const markers: SeriesMarker<Time>[] = [];
-    for (const t of trades.slice(-40)) {
-      markers.push({ time: localSec(t.open_ms - (t.open_ms % tfMs)) as Time, position: t.side === "buy" ? "belowBar" : "aboveBar", color: t.side === "buy" ? "#26a69a" : "#ef5350", shape: t.side === "buy" ? "arrowUp" : "arrowDown", text: "" });
-      markers.push({ time: localSec(t.close_ms - (t.close_ms % tfMs)) as Time, position: "inBar", color: t.net >= 0 ? "#26a69a" : "#ef5350", shape: "circle", text: no(t.net, 0) });
-    }
-    markers.sort((a, b) => (a.time as number) - (b.time as number));
-    s.setMarkers(markers);
-  }, [positions, trades, tfMs]);
-
-  return <div ref={box} className="min-h-0 flex-1" />;
 }

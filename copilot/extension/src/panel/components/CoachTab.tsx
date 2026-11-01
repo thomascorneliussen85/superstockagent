@@ -5,7 +5,7 @@ import { no } from "../describe";
 const TONE: Record<string, string> = { good: "text-tv-up", bad: "text-tv-down", warn: "text-tv-amber", neutral: "text-tv-muted" };
 const ICON: Record<string, string> = { good: "✓", bad: "✕", warn: "!", neutral: "·" };
 
-export function CoachTab({ market, onOpen }: { market: MarketState; onOpen(page: "journal" | "replay"): void }) {
+export function CoachTab({ market, onOpen }: { market: MarketState; onOpen(page: "journal" | "replay" | "chart"): void }) {
   const c = market.coach;
   const fb = market.feedback ?? c?.lastFeedback ?? null;
   return (

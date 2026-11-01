@@ -73,7 +73,7 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.kind === "open-page" && ["journal", "replay"].includes(msg.page)) {
+  if (msg?.kind === "open-page" && ["journal", "replay", "chart"].includes(msg.page)) {
     void chrome.tabs.create({ url: chrome.runtime.getURL(`${msg.page}/${msg.page}.html`) });
     sendResponse({ ok: true });
   }

@@ -122,7 +122,7 @@ class O {
     }, _);
   }
 }
-const f = 300, d = () => ({
+const f = 500, d = () => ({
   hello: null,
   status: null,
   statusAt: null,
@@ -228,7 +228,7 @@ chrome.runtime.onConnect.addListener((e) => {
     }, 6e4));
   }));
 });
-chrome.runtime.onMessage.addListener((e, t, n) => ((e == null ? void 0 : e.kind) === "open-page" && ["journal", "replay"].includes(e.page) && (chrome.tabs.create({ url: chrome.runtime.getURL(`${e.page}/${e.page}.html`) }), n({ ok: !0 })), (e == null ? void 0 : e.kind) === "open-options" && (chrome.runtime.openOptionsPage(), n({ ok: !0 })), !1));
+chrome.runtime.onMessage.addListener((e, t, n) => ((e == null ? void 0 : e.kind) === "open-page" && ["journal", "replay", "chart"].includes(e.page) && (chrome.tabs.create({ url: chrome.runtime.getURL(`${e.page}/${e.page}.html`) }), n({ ok: !0 })), (e == null ? void 0 : e.kind) === "open-options" && (chrome.runtime.openOptionsPage(), n({ ok: !0 })), !1));
 chrome.storage.onChanged.addListener((e, t) => {
   t === "local" && e[k.backend] && r.size > 0 && (c = d(), S().then((n) => o.start(n)));
 });

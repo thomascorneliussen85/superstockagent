@@ -17,7 +17,7 @@ export interface PanelTransport {
   /** Forward a request (e.g. "ask AI now") to the backend. */
   send(msg: PanelRequest): void;
   /** Open one of the extension's full pages in a new tab. */
-  openPage(page: "journal" | "replay"): void;
+  openPage(page: "journal" | "replay" | "chart"): void;
 }
 
 /** Messages from a panel to the background worker over the Port. */

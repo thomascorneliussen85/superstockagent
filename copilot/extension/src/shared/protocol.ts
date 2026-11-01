@@ -109,6 +109,17 @@ export interface TfAnalysis {
   patterns?: string[];
   events?: AnalysisEvent[];
   tickVolumeRatio?: number | null;
+  trendlines?: { kind: "support" | "resistance"; t1: number; p1: number; t2: number; p2: number; tNow: number; valueNow: number; touches: number; broken: boolean }[];
+}
+
+export interface VolumeProfile {
+  binSize: number;
+  bins: { p: number; v: number }[];
+  poc: number;
+  vah: number;
+  val: number;
+  hvn: number[];
+  bars: number;
 }
 
 export interface SpreadInfo {
@@ -133,6 +144,7 @@ export interface Analysis {
   alignment: { up: number; down: number; sideways: number };
   spread: SpreadInfo | null;
   recentEvents: AnalysisEvent[];
+  volumeProfile?: VolumeProfile | null;
 }
 
 // ---- AI commentary (backend app/ai/service.py) ----

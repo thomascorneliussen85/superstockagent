@@ -167,3 +167,118 @@ def structure_break(candles: Sequence[Candle], structure: dict) -> dict | None:
     if lo is not None and p.close >= lo > c.close:
         return {"type": "bos_down", "level": lo}
     return None
+
+
+def trendlines(
+    candles: Sequence[Candle], swings: Sequence[Swing], atr: float | None, digits: int
+) -> list[dict]:
+    """Rising support through the last two higher swing lows, falling resistance
+    through the last two lower swing highs. Closed candles only.
+
+    ``valueNow`` is the line's price at the last candle; ``broken`` means the
+    last close is on the wrong side of it.
+    """
+    if not candles or not atr:
+        return []
+    out: list[dict] = []
+    last = candles[-1]
+    for kind, pts_kind in (("support", "low"), ("resistance", "high")):
+        pts = [s for s in swings if s.kind == pts_kind]
+        if len(pts) < 2:
+            continue
+        a, b = pts[-2], pts[-1]
+        rising = b.price > a.price
+        if (kind == "support" and not rising) or (kind == "resistance" and rising) or b.time_ms == a.time_ms:
+            continue
+        slope = (b.price - a.price) / (b.time_ms - a.time_ms)
+
+        def line_at(t: int, a: Swing = a, slope: float = slope) -> float:
+            return a.price + slope * (t - a.time_ms)
+
+        touches = 0
+        violations = 0
+        for c in candles[a.index :]:
+            v = line_at(c.open_time_ms)
+            probe = c.low if kind == "support" else c.high
+            if abs(probe - v) <= 0.15 * atr:
+                touches += 1
+            if (kind == "support" and c.close < v - 0.1 * atr) or (
+                kind == "resistance" and c.close > v + 0.1 * atr
+            ):
+                violations += 1
+        now_v = line_at(last.open_time_ms)
+        broken = (last.close < now_v) if kind == "support" else (last.close > now_v)
+        if violations > 2 and not broken:
+            continue  # sliced through repeatedly: not a meaningful line
+        out.append(
+            {
+                "kind": kind,
+                "t1": a.time_ms,
+                "p1": round(a.price, digits),
+                "t2": b.time_ms,
+                "p2": round(b.price, digits),
+                "tNow": last.open_time_ms,
+                "valueNow": round(now_v, digits),
+                "touches": touches,
+                "broken": broken,
+            }
+        )
+    return out
+
+
+def volume_profile(
+    candles: Sequence[Candle], bin_size: float, digits: int, value_area: float = 0.7
+) -> dict | None:
+    """Price histogram of *tick volume* (spot gold has no central exchange volume).
+
+    Each candle's tick count is spread evenly over the price bins its range
+    covers. Returns the point of control (POC), the value area (70 % of volume
+    around the POC) and high-volume nodes (local peaks well above the median).
+    """
+    if not candles or bin_size <= 0:
+        return None
+    lo = min(c.low for c in candles)
+    hi = max(c.high for c in candles)
+    n = max(1, int((hi - lo) / bin_size) + 1)
+    if n > 400:
+        bin_size = (hi - lo) / 399
+        n = 400
+    vols = [0.0] * n
+    for c in candles:
+        i0 = int((c.low - lo) / bin_size)
+        i1 = min(n - 1, int((c.high - lo) / bin_size))
+        share = max(1, c.tick_count) / (i1 - i0 + 1)
+        for i in range(i0, i1 + 1):
+            vols[i] += share
+    total = sum(vols)
+    poc = max(range(n), key=lambda i: vols[i])
+    a = b = poc
+    acc = vols[poc]
+    while acc < value_area * total and (a > 0 or b < n - 1):
+        up = vols[b + 1] if b < n - 1 else -1
+        dn = vols[a - 1] if a > 0 else -1
+        if up >= dn:
+            b += 1
+            acc += up
+        else:
+            a -= 1
+            acc += dn
+    srt = sorted(vols)
+    median = srt[n // 2]
+    price = lambda i: round(lo + (i + 0.5) * bin_size, digits)  # noqa: E731
+    hvn = [
+        i
+        for i in range(1, n - 1)
+        if vols[i] >= vols[i - 1] and vols[i] >= vols[i + 1] and vols[i] >= 1.5 * median and i != poc
+    ]
+    hvn.sort(key=lambda i: -vols[i])
+    peak = max(vols) or 1
+    return {
+        "binSize": round(bin_size, digits),
+        "bins": [{"p": price(i), "v": round(vols[i] / peak, 3)} for i in range(n)],
+        "poc": price(poc),
+        "vah": round(lo + (b + 1) * bin_size, digits),
+        "val": round(lo + a * bin_size, digits),
+        "hvn": [price(i) for i in hvn[:3]],
+        "bars": len(candles),
+    }

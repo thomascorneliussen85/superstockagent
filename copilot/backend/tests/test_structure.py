@@ -71,3 +71,38 @@ def test_structure_break():
     assert structure_break([candle(99, 99.5, 98, 99), candle(99, 101, 98.9, 100.5, 1)], st)["type"] == "bos_up"
     assert structure_break([candle(91, 92, 90.5, 91), candle(91, 91, 89, 89.5, 1)], st)["type"] == "bos_down"
     assert structure_break([candle(95, 96, 94, 95), candle(95, 96, 94, 95.5, 1)], st) is None
+
+
+def test_trendlines_rising_support_and_broken():
+    from app.analysis.structure import trendlines
+
+    # zig-zag uptrend: higher lows at i=5 (100) and i=15 (102)
+    closes = []
+    for i in range(30):
+        base = 100 + i * 0.2
+        closes.append(base + (2 if i % 10 >= 5 else 0) - (1 if i % 10 == 5 else 0))
+    cs = bars(closes, spread=0.2)
+    sw = find_swings(cs, 3, 3)
+    lines = trendlines(cs, sw, atr=1.0, digits=2)
+    sup = [x for x in lines if x["kind"] == "support"]
+    assert sup and sup[0]["p2"] > sup[0]["p1"] and sup[0]["t2"] > sup[0]["t1"]
+    assert sup[0]["broken"] is False
+    crash = cs + bars([90.0], spread=0.2, start=cs[-1].open_time_ms + 60_000)
+    again = trendlines(crash, sw, atr=1.0, digits=2)
+    assert [x for x in again if x["kind"] == "support"][0]["broken"] is True
+
+
+def test_volume_profile_poc_and_value_area():
+    from app.analysis.structure import volume_profile
+
+    cs = [candle(100, 101, 99, 100, i) for i in range(20)]  # heavy trade around 99-101
+    cs += [candle(105, 106, 104, 105, 20 + i) for i in range(3)]
+    for c in cs[:20]:
+        c.tick_count = 100
+    for c in cs[20:]:
+        c.tick_count = 10
+    vp = volume_profile(cs, 0.5, 2)
+    assert 99 <= vp["poc"] <= 101
+    assert vp["val"] <= vp["poc"] <= vp["vah"] and vp["vah"] <= 101.5
+    assert max(b["v"] for b in vp["bins"]) == 1.0
+    assert volume_profile([], 0.5, 2) is None

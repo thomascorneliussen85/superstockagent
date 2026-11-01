@@ -24,6 +24,8 @@ from .structure import (
     level_events,
     nearest_levels,
     structure_break,
+    trendlines,
+    volume_profile,
 )
 
 EMA_PERIODS = (9, 20, 50, 200)
@@ -33,7 +35,7 @@ ST_FACTOR, ST_PERIOD = 3.0, 10
 SWING_LOOKBACK = 300  # closed bars used for levels
 MIN_BARS = 30  # below this a timeframe is reported as insufficient
 
-ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION = "2.1.0"
 
 
 def _r(v: float | None, d: int) -> float | None:
@@ -186,6 +188,7 @@ def analyze_timeframe(
             },
             "patterns": patterns,
             "events": events,
+            "trendlines": trendlines(window, swings, atr_closed_now, d),
             "tickVolumeRatio": _r(vol_ratio, 2),
         }
     )
@@ -238,6 +241,14 @@ def analyze(
     price = tick.bid if tick else None
     tfs = {tf.value: analyze_timeframe(tf, c, spec, price) for tf, c in candles_by_tf.items()}
     labels = [v["trend"]["label"] for v in tfs.values() if not v.get("insufficient")]
+    # Volume profile over ~one day of closed 5m bars (tick volume).
+    m5 = [c for c in candles_by_tf.get(Timeframe.M5, []) if c.closed][-288:]
+    atr5 = (tfs.get("5m") or {}).get("atr")
+    vp = (
+        volume_profile(m5, max(spec.point * 10, round((atr5 or 1.0) / 2, spec.digits)), spec.digits)
+        if m5
+        else None
+    )
     return {
         "engine": ENGINE_VERSION,
         "computedAt": now_ms,
@@ -251,4 +262,5 @@ def analyze(
             "sideways": labels.count("sideways"),
         },
         "spread": spread_stats(spread_samples, tick.spread if tick else None, spec),
+        "volumeProfile": vp,
     }

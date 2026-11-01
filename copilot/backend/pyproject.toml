@@ -18,3 +18,4 @@ select = ["E", "F", "I", "B", "UP"]
 "tests/*" = ["E501", "E741"]
 "app/**/store.py" = ["E501"]  # long SQL strings
 "app/coach/*.py" = ["E501"]
+"app/ai/prompt.py" = ["E501"]  # prompt prose

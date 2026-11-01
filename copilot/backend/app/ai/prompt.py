@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..market.models import Candle, SymbolSpec, Tick
 
-PROMPT_VERSION = "3.1.0"
+PROMPT_VERSION = "3.2.0"
 OSLO = ZoneInfo("Europe/Oslo")
 
 SYSTEM_PROMPT = """\
@@ -24,7 +24,7 @@ Norwegian (bokmål).
 
 You receive a JSON snapshot of facts computed by deterministic code: price, spread, indicators \
 (EMA 9/20/50/200, RSI 14, ATR 14, Supertrend 10/3), swing structure, support/resistance levels \
-with touch counts, liquidity zones (equal highs/lows), candlestick patterns, recent breakouts and \
+with touch counts, trendlines, a tick-volume profile (POC, value area, high-volume nodes), liquidity zones (equal highs/lows), candlestick patterns, recent breakouts and \
 false breakouts, the trading session, and the reasons this update was triggered. Treat the \
 snapshot as the only source of truth: use its numbers, do not invent prices or indicators that \
 are not in it, and do not claim knowledge of news.
@@ -60,11 +60,14 @@ themselves.\
 # Versioned system prompts. Every stored AI comment records the version used, so
 # results can be compared per version and a worse version rolled back with
 # COPILOT_AI_PROMPT_VERSION=<older version>.
-_POSITIONS_START = SYSTEM_PROMPT.index("If `open_positions`")
-_POSITIONS_END = SYSTEM_PROMPT.index("Speak in possibilities")
+_V31 = SYSTEM_PROMPT.replace(
+    "with touch counts, trendlines, a tick-volume profile (POC, value area, high-volume nodes), liquidity zones",
+    "with touch counts, liquidity zones",
+)
 PROMPTS: dict[str, str] = {
-    "3.0.0": SYSTEM_PROMPT[:_POSITIONS_START] + SYSTEM_PROMPT[_POSITIONS_END:],
-    "3.1.0": SYSTEM_PROMPT,
+    "3.0.0": _V31[: _V31.index("If `open_positions`")] + _V31[_V31.index("Speak in possibilities") :],
+    "3.1.0": _V31,
+    "3.2.0": SYSTEM_PROMPT,  # adds trendlines and the volume profile
 }
 LATEST_PROMPT_VERSION = PROMPT_VERSION
 
@@ -146,6 +149,10 @@ def _tf_facts(a: dict[str, Any]) -> dict[str, Any]:
         "liquidity_above": [x["price"] for x in liq.get("above", [])[:2]],
         "liquidity_below": [x["price"] for x in liq.get("below", [])[:2]],
         "patterns_last_closed": a.get("patterns", []),
+        "trendlines": [
+            {"kind": t["kind"], "value_now": t["valueNow"], "touches": t["touches"], "broken": t["broken"]}
+            for t in a.get("trendlines", [])
+        ],
         "tick_volume_vs_avg": a.get("tickVolumeRatio"),
     }
 
@@ -183,6 +190,9 @@ def build_snapshot(
         "timeframes": {k: _tf_facts(v) for k, v in analysis.get("timeframes", {}).items()},
         "last_1m_candles_ohlc": _candles(candles_1m, 6, d),
         "last_5m_candles_ohlc": _candles(candles_5m, 4, d),
+        "volume_profile_5m_tickvolume": None
+        if not analysis.get("volumeProfile")
+        else {k: analysis["volumeProfile"][k] for k in ("poc", "vah", "val", "hvn")},
         "recent_events": [
             {"tf": e["tf"], "type": e["type"], "level": e["level"]}
             for e in analysis.get("recentEvents", [])[:5]

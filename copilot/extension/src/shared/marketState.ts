@@ -2,7 +2,7 @@
 // (to hydrate newly opened panels) and by the panel itself.
 import type { AccountView, CoachPanel, TradeFeedback, AiComment, AiStatus, Analysis, CandleMsg, FeedStatus, Hello, ServerMessage, SymbolSpec, TickMsg, Timeframe } from "./protocol";
 
-export const MAX_CANDLES = 300;
+export const MAX_CANDLES = 500;
 
 export interface MarketState {
   hello: Hello | null;
